@@ -59,7 +59,7 @@ function initFirebase(dbUrl, apiKey) {
 }
 
 function setupListeners() {
-    db.ref('fishers').on('value',  s => { fishers  = s.val() ? Object.values(s.val()) : []; lsSave(LS.FISHERS,  fishers);  rerender(); });
+    db.ref('fishers').on('value',  s => { fishers  = s.val() ? Object.values(s.val()) : []; lsSave(LS.FISHERS,  fishers);  updateSyncBar(); rerender(); });
     db.ref('checkins').on('value', s => { checkins = s.val() ? Object.values(s.val()) : []; lsSave(LS.CHECKINS, checkins); rerender(); });
     db.ref('catches').on('value',  s => { catches  = s.val() ? Object.values(s.val()) : []; lsSave(LS.CATCHES,  catches);  rerender(); });
     db.ref('visitors').on('value', s => { visitors = s.val() ? Object.values(s.val()) : []; lsSave(LS.VISITORS, visitors); rerender(); });
@@ -68,6 +68,31 @@ function setupListeners() {
         activity = val ? Object.keys(val).map(function(k) { var v = val[k]; v._key = k; return v; }) : [];
         activity = activity.filter(function(a) { return a.type === 'registration'; }).sort(function(a, b) { return (b.at || '').localeCompare(a.at || ''); });
         rerender();
+    });
+    // Vynucení prvního načtení (na mobilu může přijít listener později)
+    db.ref('fishers').once('value').then(function(s) {
+        var v = s.val();
+        if (v) {
+            fishers = Object.values(v);
+            lsSave(LS.FISHERS, fishers);
+            updateSyncBar();
+            rerender();
+        }
+    }).catch(function() {});
+}
+
+function refetchFishersFromFirebase() {
+    if (!fbReady || !db) return;
+    showToast('Načítám data z Firebase…', 'info');
+    db.ref('fishers').once('value').then(function(s) {
+        var v = s.val();
+        fishers = v ? Object.values(v) : [];
+        lsSave(LS.FISHERS, fishers);
+        updateSyncBar();
+        rerender();
+        showToast(fishers.length ? 'Data načtena (' + fishers.length + ' držitelů)' : 'V databázi zatím nikdo není', 'success');
+    }).catch(function(e) {
+        showToast('Nepodařilo se načíst data', 'danger');
     });
 }
 
@@ -229,7 +254,8 @@ function updateSyncBar() {
     const bar = $('#sync-bar'), icon = $('#sync-icon'), text = $('#sync-text'), btn = $('#btn-sync-setup');
     if (fbReady) {
         bar.className = 'sync-bar sync-firebase';
-        icon.textContent = '🔥'; text.textContent = 'Firebase – data sdílena v reálném čase';
+        icon.textContent = '🔥';
+        text.textContent = 'Firebase – data sdílena v reálném čase' + (fishers.length ? ' (' + fishers.length + ' držitelů)' : '');
         btn.style.display = 'none';
     } else {
         bar.className = 'sync-bar sync-local';
@@ -444,7 +470,18 @@ function renderFishers() {
         }
     }
 
-    if (!fishers.length) { list.innerHTML=''; empty.style.display='block'; return; }
+    if (!fishers.length) {
+        list.innerHTML = '';
+        empty.style.display = 'block';
+        if (fbReady) {
+            empty.innerHTML = '<span class="empty-icon">👤</span><p>Připojeno k Firebase. Zatím zde nejsou žádní držitelé nebo data se načítají.</p><p class="hint">Stiskněte <strong>Obnovit</strong> pro znovunačtení dat z databáze.</p><button type="button" class="btn btn-primary" id="btn-refresh-fishers">🔄 Obnovit data z Firebase</button>';
+            var refBtn = $('#btn-refresh-fishers');
+            if (refBtn) refBtn.onclick = refetchFishersFromFirebase;
+        } else {
+            empty.innerHTML = '<span class="empty-icon">👤</span><p>Zatím nejsou přidáni žádní držitelé povolenky.</p><p class="hint">Nové přidejte přes tlačítko „📱 QR registrace“ (vyvěste QR u rybníka) nebo otevřete aplikaci jako správce.</p>';
+        }
+        return;
+    }
     empty.style.display = 'none';
 
     const sorted = [...fishers].sort((a,b) => a.name.localeCompare(b.name, 'cs'));
@@ -783,7 +820,6 @@ function updateFbStatusBox() {
 }
 
 $('#btn-open-settings').addEventListener('click', openSettings);
-$('#btn-settings-link')?.addEventListener('click', e => { e.preventDefault(); openSettings(); });
 
 $('#btn-save-firebase').addEventListener('click', () => {
     const url = $('#settings-firebase-url').value.trim();
@@ -818,8 +854,10 @@ catches  = lsLoad(LS.CATCHES);
 visitors = lsLoad(LS.VISITORS);
 
 // Vždy zkusit připojit Firebase (i při stažené aplikaci) – nejdřív výchozí config z kódu
-const fbUrl = localStorage.getItem(LS.FB_URL) || FB_CONFIG.databaseURL;
-const fbKey = localStorage.getItem(LS.FB_KEY) || FB_CONFIG.apiKey;
+var storedUrl = localStorage.getItem(LS.FB_URL);
+var storedKey = localStorage.getItem(LS.FB_KEY);
+var fbUrl = (storedUrl && storedUrl.trim()) ? storedUrl.trim() : FB_CONFIG.databaseURL;
+var fbKey = (storedKey && storedKey.trim()) ? storedKey.trim() : FB_CONFIG.apiKey;
 if (fbUrl && fbKey) initFirebase(fbUrl, fbKey);
 
 updateSyncBar();
