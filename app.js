@@ -11,7 +11,7 @@ const MAX_LEN   = 60;
 const FEE_BASE  = 300;
 const FEE_CARP  = 400;
 
-const BASE_URL  = 'https://pavel-vrtal-ict.github.io/hlubocek.github.io';
+const BASE_URL  = 'https://hlubocek.github.io';
 
 const FB_CONFIG = {
     apiKey:      'AIzaSyCVHqWBRA73byFuJwUaLmBSXGGbPn1k8II',
