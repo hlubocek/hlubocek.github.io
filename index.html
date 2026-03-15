@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hluboček – Evidence rybolovu</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icon.svg">
+    <meta name="theme-color" content="#1a6b3c">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Hluboček">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -14,7 +20,7 @@
     <header>
         <div class="header-content">
             <h1>🎣 Hluboček</h1>
-            <p class="subtitle">Evidence rybolovu · Kapr 45–60 cm</p>
+            <p class="subtitle">Evidence rybolovu · Kapr 45–60 cm (přisvojení dle řádu)</p>
             <a href="#" class="header-link" id="btn-podminky">Rybářský řád</a>
         </div>
         <button class="header-settings-btn" id="btn-open-settings" title="Nastavení">⚙️</button>
@@ -29,7 +35,7 @@
     <nav id="main-nav">
         <button class="nav-btn active" data-view="rybari">
             <span class="nav-icon">👤</span>
-            <span class="nav-label">Rybáři</span>
+            <span class="nav-label">Držitelé povolenky</span>
         </button>
         <button class="nav-btn" data-view="dochazka">
             <span class="nav-icon">📅</span>
@@ -54,7 +60,7 @@
         <!-- RYBÁŘI -->
         <section id="view-rybari" class="view active">
             <div class="section-header">
-                <h2>Rybáři</h2>
+                <h2>Držitelé povolenky</h2>
                 <div style="display:flex;gap:.5rem;">
                     <button class="btn btn-secondary btn-sm" id="btn-reg-qr">📱 QR registrace</button>
                     <button class="btn btn-primary" id="btn-new-fisher">+ Přidat</button>
@@ -63,7 +69,7 @@
             <div id="fishers-list" class="card-list"></div>
             <div id="no-fishers" class="empty-state">
                 <span class="empty-icon">👤</span>
-                <p>Zatím nejsou přidáni žádní rybáři.</p>
+                <p>Zatím nejsou přidáni žádní držitelé povolenky.</p>
                 <p class="hint">Klikněte na „+ Přidat" nebo vyvěste QR kód pro registraci.</p>
             </div>
         </section>
@@ -76,7 +82,7 @@
             <div class="inline-form">
                 <div class="form-row-2">
                     <div class="form-group">
-                        <label for="ci-fisher">Rybář</label>
+                        <label for="ci-fisher">Držitel povolenky</label>
                         <select id="ci-fisher"></select>
                     </div>
                     <div class="form-group">
@@ -97,7 +103,7 @@
             <div class="inline-form">
                 <div class="form-row-2">
                     <div class="form-group">
-                        <label for="catch-fisher">Rybář</label>
+                        <label for="catch-fisher">Držitel povolenky</label>
                         <select id="catch-fisher"></select>
                     </div>
                     <div class="form-group">
@@ -129,7 +135,7 @@
             <div class="inline-form">
                 <div class="form-row-2">
                     <div class="form-group">
-                        <label for="visit-fisher">Člen (kdo pozval)</label>
+                        <label for="visit-fisher">Hostitel (držitel povolenky, kdo pozval)</label>
                         <select id="visit-fisher"></select>
                     </div>
                     <div class="form-group">
@@ -141,13 +147,7 @@
                     <label for="visit-name">Jméno návštěvy</label>
                     <input type="text" id="visit-name" placeholder="Jméno hosta">
                 </div>
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.85rem;padding:.75rem;background:#f8faf8;border:1.5px solid #d4ddd7;border-radius:8px;">
-                    <label style="display:flex;align-items:center;gap:.75rem;font-size:1rem;font-weight:500;cursor:pointer;user-select:none;flex:1;">
-                        <input type="checkbox" id="visit-carp" style="width:24px;height:24px;accent-color:#1a6b3c;cursor:pointer;flex-shrink:0;">
-                        <span>Vzal kapra (+400 Kč)</span>
-                    </label>
-                    <div class="visit-fee-display" id="visit-fee-display">300 Kč</div>
-                </div>
+                <p class="form-hint visit-fee-note">Podle řádu: poplatek <strong>300 Kč / 24 h lovu</strong>. Návštěva hradí hostiteli, hostitel jej neprodleně předá správci rybníka. Návštěva si <strong>nesmí přisvojit žádnou rybu</strong>.</p>
                 <button class="btn btn-primary btn-full" id="btn-visit-submit">👥 Zapsat návštěvu</button>
             </div>
             <div id="navstevy-content"></div>
@@ -169,7 +169,7 @@
         <div class="checkin-card">
             <div class="checkin-fish-icon">🎣</div>
             <h2>Hluboček</h2>
-            <p class="checkin-location">📍 Registrace nového člena</p>
+            <p class="checkin-location">📍 Registrace nového držitele povolenky</p>
             <form id="reg-form" style="text-align:left;margin-top:1.1rem;">
                 <div class="form-group">
                     <label for="reg-name">Jméno a příjmení</label>
@@ -188,11 +188,11 @@
         </div>
     </div>
 
-    <!-- MODAL: Přidat / upravit rybáře -->
+    <!-- MODAL: Přidat / upravit držitele povolenky -->
     <div id="modal-fisher" class="modal-overlay">
         <div class="modal">
             <div class="modal-header">
-                <h3 id="modal-fisher-title">Nový rybář</h3>
+                <h3 id="modal-fisher-title">Nový držitel povolenky</h3>
                 <button class="modal-close" id="modal-close-fisher">&times;</button>
             </div>
             <form id="fisher-form">
@@ -222,7 +222,7 @@
             </div>
             <div class="qr-body">
                 <p style="font-size:.85rem;color:var(--text-secondary);margin-bottom:.75rem;text-align:center;">
-                    Nový člen naskenuje kód a vyplní registrační formulář. Vyvěste na nástěnce u rybníka.
+                    Nový držitel povolenky naskenuje kód a vyplní registrační formulář. Vyvěste na nástěnce u rybníka.
                 </p>
                 <div id="qr-canvas-wrap" style="display:flex;justify-content:center;"></div>
             </div>
@@ -238,15 +238,15 @@
             </div>
             <div class="podminky-body">
                 <a href="Rybarsky-rad-Hlubocek.pdf" target="_blank" rel="noopener" class="podminky-pdf-link">📄 Otevřít Rybářský řád (PDF)</a>
-                <p><strong>Rybník Hluboček – rybářský řád</strong></p>
+                <p><strong>Rybník Hluboček – výtah z rybářského řádu</strong></p>
                 <ul>
-                    <li>Rybolov pouze pro registrované členy.</li>
-                    <li>Povolený odchov kapra v rozmezí 45–60 cm.</li>
-                    <li>Případný odnos ryby domů je nutné zapsat v aplikaci (úlovek).</li>
-                    <li>Návštěvy (nečlenové) pouze v doprovodu člena; poplatek dle ceníku (300 Kč, při odnosu kapra +400 Kč).</li>
-                    <li>Docházku a úlovky je třeba evidovat v den rybolovu.</li>
+                    <li>Rybolov pouze pro držitele povolenek (členy místního rybářského spolku).</li>
+                    <li>Kapr při přisvojení: míra 45–60 cm (dospělý max. 3 ks/rok, 1 ks/den; dítě 8–14 let 1 ks/rok).</li>
+                    <li>Přisvojenou rybu je nutné zapsat v aplikaci v den ulovení (úlovek).</li>
+                    <li>Návštěvy pouze v doprovodu držitele povolenky; poplatek 300 Kč / 24 h. Návštěva si <strong>nesmí přisvojit žádnou rybu</strong>.</li>
+                    <li>Docházku zapsat ihned po příchodu k vodě, úlovky a návštěvy evidovat v aplikaci.</li>
                 </ul>
-                <p>Aplikace slouží k evidenci členů, docházky, úlovků a návštěv. Data mohou být sdílena přes Firebase mezi zařízeními.</p>
+                <p>Plné znění viz PDF výše. Aplikace slouží k evidenci členů, docházky, úlovků a návštěv.</p>
             </div>
         </div>
     </div>

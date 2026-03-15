@@ -8,8 +8,7 @@ const LOCATION  = 'Hluboček';
 const SPECIES   = 'Kapr';
 const MIN_LEN   = 45;
 const MAX_LEN   = 60;
-const FEE_BASE  = 300;
-const FEE_CARP  = 400;
+const FEE_VISIT = 300;  // poplatek za návštěvu / 24 h (dle řádu; návštěva si nesmí přisvojit rybu)
 
 const BASE_URL  = 'https://hlubocek.github.io';
 
@@ -230,7 +229,7 @@ let editingFisherId = null;
 
 $('#btn-new-fisher').addEventListener('click', () => {
     editingFisherId = null;
-    $('#modal-fisher-title').textContent = 'Nový rybář';
+    $('#modal-fisher-title').textContent = 'Nový držitel povolenky';
     $('#fisher-form').reset();
     openModal(modals.fisher);
 });
@@ -262,7 +261,7 @@ $('#fisher-form').addEventListener('submit', e => {
         populateFisherSelects();
     }
     closeModal(modals.fisher);
-    showToast(editingFisherId ? 'Rybář upraven' : `${name} přidán`);
+    showToast(editingFisherId ? 'Držitel povolenky upraven' : `${name} přidán`);
     editingFisherId = null;
 });
 
@@ -293,7 +292,7 @@ window._editFisher = function(id) {
     const f = fishers.find(x => x.id === id);
     if (!f) return;
     editingFisherId = id;
-    $('#modal-fisher-title').textContent = 'Upravit rybáře';
+    $('#modal-fisher-title').textContent = 'Upravit držitele povolenky';
     $('#fisher-name').value   = f.name;
     $('#fisher-number').value = f.number || '';
     $('#fisher-phone').value  = f.phone  || '';
@@ -302,7 +301,7 @@ window._editFisher = function(id) {
 
 window._deleteFisher = function(id) {
     const f = fishers.find(x => x.id === id);
-    if (!f || !confirm(`Smazat ${f.name} včetně všech záznamů?`)) return;
+    if (!f || !confirm(`Smazat držitele povolenky ${f.name} včetně všech záznamů?`)) return;
     dbRemove('fishers', id);
     checkins.filter(c => c.fisherId === id).forEach(c => dbRemove('checkins',  c.id));
     catches.filter(c  => c.fisherId === id).forEach(c => dbRemove('catches',   c.id));
@@ -315,7 +314,7 @@ window._deleteFisher = function(id) {
         renderFishers();
         populateFisherSelects();
     }
-    showToast('Rybář smazán');
+    showToast('Držitel povolenky smazán');
 };
 
 // ════════════════════════════════════════
@@ -324,10 +323,10 @@ window._deleteFisher = function(id) {
 $('#btn-ci-submit').addEventListener('click', () => {
     const fid  = $('#ci-fisher').value;
     const date = $('#ci-date').value;
-    if (!fid)  { showToast('Nejdříve přidejte rybáře', 'warning'); return; }
+    if (!fid)  { showToast('Nejdříve přidejte držitele povolenky', 'warning'); return; }
     if (!date) { showToast('Vyberte datum', 'warning'); return; }
     const already = checkins.find(c => c.fisherId === fid && c.date === date);
-    if (already) { showToast('Tento rybář je na tento den již evidován', 'warning'); return; }
+    if (already) { showToast('Tento držitel povolenky je na tento den již evidován', 'warning'); return; }
     const id = genId();
     const ci = { id, fisherId: fid, date, timestamp: new Date().toISOString() };
     dbSet('checkins', id, ci);
@@ -389,7 +388,7 @@ $('#btn-catch-submit').addEventListener('click', () => {
     const date   = $('#catch-date').value;
     const length = parseInt($('#catch-length').value);
     const kept   = $('#catch-kept').checked;
-    if (!fid)                              { showToast('Nejdříve přidejte rybáře', 'warning'); return; }
+    if (!fid)                              { showToast('Nejdříve přidejte držitele povolenky', 'warning'); return; }
     if (!date)                             { showToast('Vyberte datum', 'warning'); return; }
     if (!length || length < 5 || length > 150) { showToast('Zadejte délku v cm (5–150)', 'warning'); return; }
     const id  = genId();
@@ -453,28 +452,19 @@ window._deleteCatch = function(id) {
 // ════════════════════════════════════════
 // NÁVŠTĚVY
 // ════════════════════════════════════════
-$('#visit-carp').addEventListener('change', () => {
-    const tookCarp = $('#visit-carp').checked;
-    $('#visit-fee-display').textContent = (FEE_BASE + (tookCarp ? FEE_CARP : 0)) + ' Kč';
-});
-
 $('#btn-visit-submit').addEventListener('click', () => {
     const fid         = $('#visit-fisher').value;
     const date        = $('#visit-date').value;
     const visitorName = $('#visit-name').value.trim();
-    const tookCarp    = $('#visit-carp').checked;
-    if (!fid)         { showToast('Nejdříve přidejte rybáře', 'warning'); return; }
+    if (!fid)         { showToast('Nejdříve přidejte držitele povolenky', 'warning'); return; }
     if (!visitorName) { showToast('Zadejte jméno návštěvy', 'warning'); return; }
     if (!date)        { showToast('Vyberte datum', 'warning'); return; }
-    const fee = FEE_BASE + (tookCarp ? FEE_CARP : 0);
     const id  = genId();
-    const v   = { id, fisherId: fid, visitorName, date, tookCarp, fee, timestamp: new Date().toISOString() };
+    const v   = { id, fisherId: fid, visitorName, date, fee: FEE_VISIT, timestamp: new Date().toISOString() };
     dbSet('visitors', id, v);
     if (!fbReady) { visitors.push(v); renderNavstevy(); }
-    $('#visit-name').value      = '';
-    $('#visit-carp').checked    = false;
-    $('#visit-fee-display').textContent = FEE_BASE + ' Kč';
-    showToast(`👥 Návštěva zapsána · ${fee} Kč`, 'success');
+    $('#visit-name').value = '';
+    showToast(`👥 Návštěva zapsána · ${FEE_VISIT} Kč`, 'success');
 });
 
 function renderNavstevy() {
@@ -487,7 +477,7 @@ function renderNavstevy() {
     const years   = [...new Set(sorted.map(v => v.timestamp?.slice(0,4)))].sort().reverse();
     const selYear = $('#navstevy-year-sel')?.value || years[0];
     const filtered  = sorted.filter(v => v.timestamp?.startsWith(selYear));
-    const totalFee  = filtered.reduce((s,v) => s + (v.fee||0), 0);
+    const totalFee  = filtered.reduce((s,v) => s + (v.fee ?? FEE_VISIT), 0);
     const groups    = {};
     filtered.forEach(v => { if (!groups[v.date]) groups[v.date] = []; groups[v.date].push(v); });
 
@@ -506,9 +496,9 @@ function renderNavstevy() {
                     return `<div class="visit-row">
                         <div class="visit-row-main">
                             <div class="visit-row-name">👤 ${esc(v.visitorName)}</div>
-                            <div class="visit-row-meta">pozval: ${f ? esc(f.name) : '?'}${v.tookCarp ? ' · 🐟 vzal kapra' : ''}</div>
+                            <div class="visit-row-meta">hostitel: ${f ? esc(f.name) : '?'}</div>
                         </div>
-                        <span class="visit-fee-badge">${v.fee} Kč</span>
+                        <span class="visit-fee-badge">${v.fee ?? FEE_VISIT} Kč</span>
                         <button class="btn btn-danger btn-sm" onclick="window._deleteVisitor('${v.id}')">✕</button>
                     </div>`;
                 }).join('')}
