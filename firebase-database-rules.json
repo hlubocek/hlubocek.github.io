@@ -15,6 +15,10 @@
     "visitors": {
       ".read": true,
       ".write": true
+    },
+    "activity": {
+      ".read": true,
+      ".write": true
     }
   }
 }

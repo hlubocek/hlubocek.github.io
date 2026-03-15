@@ -258,6 +258,19 @@ main { max-width: 640px; margin: 0 auto; padding: 1rem; }
 }
 .reg-rad-confirm-label input[type="checkbox"] { width: 20px; height: 20px; margin-top: .1rem; flex-shrink: 0; accent-color: var(--primary); }
 .reg-rad-confirm-label input:disabled { cursor: not-allowed; opacity: .7; }
+.reg-warning-strip {
+    display: flex; align-items: center; justify-content: center; gap: .5rem;
+    background: #c62828; color: #fff; padding: .65rem .85rem; margin: .75rem 0 0 0;
+    border-radius: var(--radius-sm); font-size: .85rem; font-weight: 600; text-align: center;
+}
+.recent-registrations {
+    background: var(--surface); border: 1px solid var(--border-light); border-radius: var(--radius-sm);
+    padding: .75rem 1rem; margin-bottom: 1rem; font-size: .85rem;
+}
+.recent-registrations h3 { font-size: .9rem; margin: 0 0 .5rem 0; color: var(--text-secondary); }
+.recent-registrations ul { margin: 0; padding-left: 1.2rem; }
+.recent-registrations li { margin-bottom: .25rem; }
+.recent-reg-date { color: var(--text-secondary); font-weight: normal; font-size: .8em; }
 
 /* ── DOCHÁZKA ── */
 .day-group { margin-bottom: 1.25rem; }

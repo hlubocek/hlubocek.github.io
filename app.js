@@ -35,10 +35,11 @@ const LS = {
 // ════════════════════════════════════════
 let db = null, fbReady = false;
 
-let fishers  = [];
-let checkins = [];
-let catches  = [];
-let visitors = [];
+let fishers   = [];
+let checkins  = [];
+let catches   = [];
+let visitors  = [];
+let activity  = [];
 
 function lsLoad(k)    { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } }
 function lsSave(k, d) { localStorage.setItem(k, JSON.stringify(d)); }
@@ -62,6 +63,12 @@ function setupListeners() {
     db.ref('checkins').on('value', s => { checkins = s.val() ? Object.values(s.val()) : []; lsSave(LS.CHECKINS, checkins); rerender(); });
     db.ref('catches').on('value',  s => { catches  = s.val() ? Object.values(s.val()) : []; lsSave(LS.CATCHES,  catches);  rerender(); });
     db.ref('visitors').on('value', s => { visitors = s.val() ? Object.values(s.val()) : []; lsSave(LS.VISITORS, visitors); rerender(); });
+    db.ref('activity').limitToLast(30).on('value', s => {
+        var val = s.val();
+        activity = val ? Object.keys(val).map(function(k) { var v = val[k]; v._key = k; return v; }) : [];
+        activity = activity.filter(function(a) { return a.type === 'registration'; }).sort(function(a, b) { return (b.at || '').localeCompare(a.at || ''); });
+        rerender();
+    });
 }
 
 function rerender() {
@@ -264,11 +271,12 @@ function handleUrlAction() {
 // ════════════════════════════════════════
 function showRegOverlay() {
     $('#reg-form').reset();
-    var scrollEl = $('#reg-rad-scroll'), checkEl = $('#reg-rad-confirm'), btn = $('#reg-submit-btn'), hint = $('#reg-rad-confirm-text');
+    var scrollEl = $('#reg-rad-scroll'), checkEl = $('#reg-rad-confirm'), btn = $('#reg-submit-btn'), hint = $('#reg-rad-confirm-text'), strip = $('#reg-warning-strip');
     if (scrollEl) { scrollEl.scrollTop = 0; }
     if (checkEl) { checkEl.checked = false; checkEl.disabled = true; }
     if (btn) btn.disabled = true;
     if (hint) hint.textContent = 'Dojeďte dolů, poté zde potvrďte přečtení řádu.';
+    if (strip) strip.style.display = 'none';
     $('#reg-overlay').style.display = 'flex';
     if (window._regNoScrollTimer) { clearTimeout(window._regNoScrollTimer); window._regNoScrollTimer = null; }
     if (window._regScrollTimer) clearTimeout(window._regScrollTimer);
@@ -284,12 +292,14 @@ function regCheckScrollEnd() {
         if (window._regNoScrollTimer) { clearTimeout(window._regNoScrollTimer); window._regNoScrollTimer = null; }
         check.disabled = false;
         if (hint) hint.textContent = 'Potvrzuji, že jsem se seznámil(a) s rybářským řádem a souhlasím s ním.';
+        var ws = $('#reg-warning-strip'); if (ws) ws.style.display = 'none';
     } else if (!scrollable) {
         if (window._regNoScrollTimer) return;
         window._regNoScrollTimer = setTimeout(function() {
             window._regNoScrollTimer = null;
             check.disabled = false;
             if (hint) hint.textContent = 'Potvrzuji, že jsem se seznámil(a) s rybářským řádem a souhlasím s ním.';
+            var ws = $('#reg-warning-strip'); if (ws) ws.style.display = 'none';
         }, 3000);
     }
 }
@@ -306,6 +316,14 @@ var regConfirmEl = $('#reg-rad-confirm');
 if (regConfirmEl) regConfirmEl.addEventListener('change', function() {
     var btn = $('#reg-submit-btn');
     if (btn) btn.disabled = !$('#reg-rad-confirm').checked;
+    var ws = $('#reg-warning-strip'); if (ws) ws.style.display = 'none';
+});
+$('#reg-submit-btn').addEventListener('click', function() {
+    if (this.disabled) {
+        var strip = $('#reg-warning-strip'), scrollEl = $('#reg-rad-scroll');
+        if (strip) strip.style.display = 'flex';
+        if (scrollEl) scrollEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 });
 
 $('#reg-form').addEventListener('submit', e => {
@@ -313,17 +331,36 @@ $('#reg-form').addEventListener('submit', e => {
     const name = $('#reg-name').value.trim();
     if (!name) return;
     if (!$('#reg-rad-confirm').checked) {
+        var strip = $('#reg-warning-strip');
+        if (strip) strip.style.display = 'flex';
+        var scrollEl = $('#reg-rad-scroll');
+        if (scrollEl) scrollEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
         showToast('Potvrďte přečtení rybářského řádu.', 'warning');
+        return;
+    }
+    const number = $('#reg-number').value.trim();
+    const phone  = $('#reg-phone').value.trim();
+    var duplicate = fishers.find(function(f) {
+        if (f.name && name && f.name.trim().toLowerCase() === name.toLowerCase()) return true;
+        if (number && f.number && f.number.trim() === number) return true;
+        if (phone && f.phone && f.phone.trim().replace(/\s/g, '') === phone.replace(/\s/g, '')) return true;
+        return false;
+    });
+    if (duplicate) {
+        showToast('Už jste zaregistrován(a). Pokud máte dotazy, kontaktujte správce.', 'warning');
         return;
     }
     const id   = genId();
     const data = {
         id, name,
-        number:      $('#reg-number').value.trim(),
-        phone:       $('#reg-phone').value.trim(),
+        number: number,
+        phone:  phone,
         registeredAt: new Date().toISOString()
     };
     dbSet('fishers', id, data);
+    if (fbReady) {
+        try { db.ref('activity').push({ type: 'registration', name: name, id: id, at: data.registeredAt }); } catch (_) {}
+    }
     var idx = fishers.findIndex(function(f) { return f.id === id; });
     if (idx >= 0) fishers[idx] = data; else fishers.push(data);
     lsSave(LS.FISHERS, fishers);
@@ -382,6 +419,7 @@ function renderFishers() {
     const addBtn = $('#btn-new-fisher');
     const adminHint = $('#admin-hint');
     const adminLogout = $('#link-admin-logout');
+    const recentReg = $('#recent-registrations');
     if (addBtn) addBtn.style.display = admin ? '' : 'none';
     if (adminLogout) adminLogout.style.display = admin ? '' : 'none';
     if (adminHint) {
@@ -389,6 +427,20 @@ function renderFishers() {
         else {
             adminHint.style.display = 'block';
             adminHint.innerHTML = 'Nové držitele přidávejte pouze přes QR kód (tlačítko výše) nebo <a href="#" id="link-admin-pin">zadejte PIN správce</a>.';
+        }
+    }
+    if (recentReg) {
+        if (admin && fbReady && activity.length) {
+            var regs = activity.slice(0, 10);
+            var items = regs.map(function(a) {
+                var d = (a.at || '').slice(0, 10);
+                var t = (a.at || '').slice(11, 16);
+                return '<li>' + esc(a.name || '') + (d ? ' <span class="recent-reg-date">' + d + ' ' + (t || '') + '</span>' : '') + '</li>';
+            }).join('');
+            recentReg.style.display = 'block';
+            recentReg.innerHTML = '<h3>📋 Poslední registrace (pro správce)</h3><ul>' + items + '</ul>';
+        } else {
+            recentReg.style.display = 'none';
         }
     }
 
