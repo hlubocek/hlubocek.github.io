@@ -69,6 +69,8 @@ header .subtitle { font-size: 0.8rem; opacity: .85; margin-top: .1rem; }
 }
 .sync-local    { background: #fff3cd; color: #856404; }
 .sync-firebase { background: #e6f4ea; color: var(--primary); }
+#sync-refresh-wrap { margin-left: .35rem; }
+#sync-refresh-link { color: inherit; text-decoration: underline; font-weight: 700; cursor: pointer; }
 .sync-setup-btn {
     padding: .18rem .6rem; border-radius: 100px; border: 1px solid currentColor;
     background: transparent; color: inherit; font-size: .75rem; font-weight: 700; cursor: pointer;
@@ -410,6 +412,7 @@ main { max-width: 640px; margin: 0 auto; padding: 1rem; }
 .empty-icon  { font-size: 2.75rem; display: block; margin-bottom: .6rem; }
 .empty-state p { font-size: .95rem; margin-bottom: .2rem; }
 .empty-state .hint { font-size: .83rem; opacity: .7; }
+.empty-state .btn { margin-top: .75rem; }
 
 /* ── SETTINGS ── */
 .settings-section { margin-bottom: 1rem; }

@@ -96,6 +96,26 @@ function refetchFishersFromFirebase() {
     });
 }
 
+function refetchAllFromFirebase() {
+    if (!fbReady || !db) return;
+    showToast('Načítám data z Firebase…', 'info');
+    Promise.all([
+        db.ref('fishers').once('value'),
+        db.ref('checkins').once('value'),
+        db.ref('catches').once('value'),
+        db.ref('visitors').once('value')
+    ]).then(function(ss) {
+        fishers  = ss[0].val() ? Object.values(ss[0].val()) : [];
+        checkins = ss[1].val() ? Object.values(ss[1].val()) : [];
+        catches  = ss[2].val() ? Object.values(ss[2].val()) : [];
+        visitors = ss[3].val() ? Object.values(ss[3].val()) : [];
+        lsSave(LS.FISHERS, fishers); lsSave(LS.CHECKINS, checkins); lsSave(LS.CATCHES, catches); lsSave(LS.VISITORS, visitors);
+        updateSyncBar();
+        rerender();
+        showToast('Data načtena', 'success');
+    }).catch(function() { showToast('Nepodařilo se načíst data', 'danger'); });
+}
+
 function rerender() {
     renderFishers();
     populateFisherSelects();
@@ -251,16 +271,20 @@ async function checkAdminPin(pin) {
 
 // ── Sync bar ──
 function updateSyncBar() {
-    const bar = $('#sync-bar'), icon = $('#sync-icon'), text = $('#sync-text'), btn = $('#btn-sync-setup');
+    const bar = $('#sync-bar'), icon = $('#sync-icon'), text = $('#sync-text'), btn = $('#btn-sync-setup'), refreshWrap = $('#sync-refresh-wrap');
     if (fbReady) {
         bar.className = 'sync-bar sync-firebase';
         icon.textContent = '🔥';
         text.textContent = 'Firebase – data sdílena v reálném čase' + (fishers.length ? ' (' + fishers.length + ' držitelů)' : '');
         btn.style.display = 'none';
+        if (refreshWrap) { refreshWrap.style.display = ''; refreshWrap.innerHTML = '<a href="#" id="sync-refresh-link">Obnovit</a>'; }
+        var refLink = $('#sync-refresh-link');
+        if (refLink) refLink.onclick = function(e) { e.preventDefault(); refetchAllFromFirebase(); };
     } else {
         bar.className = 'sync-bar sync-local';
         icon.textContent = '💾'; text.textContent = 'Lokální režim – data jen zde. Pro sdílení: otevřete hlubocek.github.io nebo v ⚙️ nastavte Firebase (a v Firebase Console nastavte Rules).';
         btn.style.display = '';
+        if (refreshWrap) refreshWrap.style.display = 'none';
     }
 }
 $('#btn-sync-setup').addEventListener('click', openSettings);
@@ -452,7 +476,7 @@ function renderFishers() {
         if (admin) { adminHint.style.display = 'none'; }
         else {
             adminHint.style.display = 'block';
-            adminHint.innerHTML = 'Nové držitele přidávejte pouze přes QR kód (tlačítko výše) nebo <a href="#" id="link-admin-pin">zadejte PIN správce</a>.';
+            adminHint.innerHTML = 'Nové držitele přidávejte přes QR kód (tlačítko výše). Pro úpravu a mazání: <a href="#" id="link-admin-pin">zadejte PIN správce</a>.';
         }
     }
     if (recentReg) {
@@ -521,14 +545,17 @@ window._deleteFisher = function(id) {
     checkins.filter(c => c.fisherId === id).forEach(c => dbRemove('checkins',  c.id));
     catches.filter(c  => c.fisherId === id).forEach(c => dbRemove('catches',   c.id));
     visitors.filter(v => v.fisherId === id).forEach(v => dbRemove('visitors',  v.id));
-    if (!fbReady) {
-        fishers  = fishers.filter(x => x.id !== id);
-        checkins = checkins.filter(c => c.fisherId !== id);
-        catches  = catches.filter(c => c.fisherId !== id);
-        visitors = visitors.filter(v => v.fisherId !== id);
-        renderFishers();
-        populateFisherSelects();
-    }
+    fishers  = fishers.filter(x => x.id !== id);
+    checkins = checkins.filter(c => c.fisherId !== id);
+    catches  = catches.filter(c => c.fisherId !== id);
+    visitors = visitors.filter(v => v.fisherId !== id);
+    lsSave(LS.FISHERS, fishers); lsSave(LS.CHECKINS, checkins); lsSave(LS.CATCHES, catches); lsSave(LS.VISITORS, visitors);
+    renderFishers();
+    populateFisherSelects();
+    if (currentView === 'dochazka') renderDochazka();
+    if (currentView === 'ulovky') renderUlovky();
+    if (currentView === 'navstevy') renderNavstevy();
+    if (currentView === 'statistiky') renderStatistiky();
     showToast('Držitel povolenky smazán');
 };
 
@@ -578,7 +605,9 @@ function renderDochazka() {
 window._deleteCheckin = function(id) {
     if (!confirm('Smazat záznam příchodu?')) return;
     dbRemove('checkins', id);
-    if (!fbReady) { checkins = checkins.filter(c => c.id !== id); renderDochazka(); }
+    checkins = checkins.filter(c => c.id !== id);
+    lsSave(LS.CHECKINS, checkins);
+    renderDochazka();
     showToast('Záznam smazán');
 };
 
@@ -660,7 +689,10 @@ window._refreshUlovky = function() { renderUlovky(); };
 window._deleteCatch = function(id) {
     if (!confirm('Smazat úlovek?')) return;
     dbRemove('catches', id);
-    if (!fbReady) { catches = catches.filter(c => c.id !== id); renderUlovky(); }
+    catches = catches.filter(c => c.id !== id);
+    lsSave(LS.CATCHES, catches);
+    renderUlovky();
+    if (currentView === 'statistiky') renderStatistiky();
     showToast('Úlovek smazán');
 };
 
@@ -725,7 +757,10 @@ window._refreshNavstevy = function() { renderNavstevy(); };
 window._deleteVisitor = function(id) {
     if (!confirm('Smazat záznam návštěvy?')) return;
     dbRemove('visitors', id);
-    if (!fbReady) { visitors = visitors.filter(v => v.id !== id); renderNavstevy(); }
+    visitors = visitors.filter(v => v.id !== id);
+    lsSave(LS.VISITORS, visitors);
+    renderNavstevy();
+    if (currentView === 'statistiky') renderStatistiky();
     showToast('Záznam smazán');
 };
 
