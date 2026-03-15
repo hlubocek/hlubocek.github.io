@@ -4,3 +4,4 @@ desktop.ini
 *.swp
 *.swo
 *-firebase-adminsdk-*.json
+node_modules/

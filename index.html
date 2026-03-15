@@ -5,8 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hluboček – Evidence rybolovu</title>
     <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon-16.png" sizes="16x16" type="image/png">
+    <link rel="icon" href="icon-32.png" sizes="32x32" type="image/png">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="icon.svg">
+    <link rel="apple-touch-icon" href="icon-192.png" sizes="192x192">
+    <link rel="apple-touch-icon" href="icon-512.png" sizes="512x512">
     <meta name="theme-color" content="#1a6b3c">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Hluboček">
@@ -61,16 +64,18 @@
         <section id="view-rybari" class="view active">
             <div class="section-header">
                 <h2>Držitelé povolenky</h2>
-                <div style="display:flex;gap:.5rem;">
+                <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
                     <button class="btn btn-secondary btn-sm" id="btn-reg-qr">📱 QR registrace</button>
                     <button class="btn btn-primary" id="btn-new-fisher">+ Přidat</button>
+                    <a href="#" id="link-admin-logout" class="admin-logout" style="display:none">Odhlásit správce</a>
                 </div>
             </div>
+            <p id="admin-hint" class="admin-hint" style="display:none"></p>
             <div id="fishers-list" class="card-list"></div>
             <div id="no-fishers" class="empty-state">
                 <span class="empty-icon">👤</span>
                 <p>Zatím nejsou přidáni žádní držitelé povolenky.</p>
-                <p class="hint">Klikněte na „+ Přidat" nebo vyvěste QR kód pro registraci.</p>
+                <p class="hint">Nové přidejte přes tlačítko „📱 QR registrace“ (vyvěste QR u rybníka) nebo otevřete aplikaci jako správce.</p>
             </div>
         </section>
 
@@ -251,12 +256,42 @@
         </div>
     </div>
 
+    <!-- MODAL: PIN správce -->
+    <div id="modal-admin-pin" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>🔐 PIN správce</h3>
+                <button class="modal-close" id="modal-close-admin-pin">&times;</button>
+            </div>
+            <form id="admin-pin-form">
+                <div class="form-group">
+                    <label for="admin-pin-input">Zadejte PIN</label>
+                    <input type="password" id="admin-pin-input" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="8" placeholder="4–8 číslic" autocomplete="off">
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">Přihlásit jako správce</button>
+            </form>
+        </div>
+    </div>
+
     <!-- MODAL: Nastavení -->
     <div id="modal-settings" class="modal-overlay">
         <div class="modal">
             <div class="modal-header">
                 <h3>⚙️ Nastavení</h3>
                 <button class="modal-close" id="modal-close-settings">&times;</button>
+            </div>
+            <div class="settings-section">
+                <h4>🔐 PIN správce</h4>
+                <p class="settings-desc">PIN slouží k přihlášení do režimu správce (přidávání a úpravy držitelů povolenky). Nastavte si 4–8 číslic a nezapomeňte je.</p>
+                <div class="form-group">
+                    <label for="settings-pin-new">Nový PIN</label>
+                    <input type="password" id="settings-pin-new" inputmode="numeric" placeholder="4–8 číslic" minlength="4" maxlength="8" autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label for="settings-pin-confirm">Potvrdit PIN</label>
+                    <input type="password" id="settings-pin-confirm" inputmode="numeric" placeholder="znovu stejný PIN" minlength="4" maxlength="8" autocomplete="new-password">
+                </div>
+                <button type="button" class="btn btn-primary btn-full" id="btn-save-pin">Uložit PIN</button>
             </div>
             <div class="settings-section">
                 <h4>🔥 Firebase – sdílení dat</h4>

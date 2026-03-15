@@ -20,12 +20,14 @@ const FB_CONFIG = {
 };
 
 const LS = {
-    FISHERS:  'hlb_fishers',
-    CHECKINS: 'hlb_checkins',
-    CATCHES:  'hlb_catches',
-    VISITORS: 'hlb_visitors',
-    FB_URL:   'hlb_fb_url',
-    FB_KEY:   'hlb_fb_key'
+    FISHERS:   'hlb_fishers',
+    CHECKINS:  'hlb_checkins',
+    CATCHES:   'hlb_catches',
+    VISITORS:  'hlb_visitors',
+    FB_URL:    'hlb_fb_url',
+    FB_KEY:   'hlb_fb_key',
+    ADMIN:     'hlb_admin',
+    ADMIN_PIN: 'hlb_admin_pin'
 };
 
 // ════════════════════════════════════════
@@ -114,6 +116,7 @@ function switchView(name) {
     views[name].classList.add('active');
     navBtns.forEach(b => b.classList.toggle('active', b.dataset.view === name));
     populateFisherSelects();
+    if (name === 'rybari')     renderFishers();
     if (name === 'dochazka')   renderDochazka();
     if (name === 'ulovky')     renderUlovky();
     if (name === 'navstevy')   renderNavstevy();
@@ -136,16 +139,45 @@ const modals = {
     fisher:   $('#modal-fisher'),
     qr:       $('#modal-qr'),
     settings: $('#modal-settings'),
-    podminky: $('#modal-podminky')
+    podminky: $('#modal-podminky'),
+    adminPin: $('#modal-admin-pin')
 };
-function openModal(m)  { m.classList.add('open');    document.body.style.overflow = 'hidden'; }
-function closeModal(m) { m.classList.remove('open'); document.body.style.overflow = ''; }
+function openModal(m)  { if (m) m.classList.add('open');    document.body.style.overflow = 'hidden'; }
+function closeModal(m) { if (m) m.classList.remove('open'); document.body.style.overflow = ''; }
 Object.values(modals).forEach(m => m && m.addEventListener('click', e => { if (e.target === m) closeModal(m); }));
 $('#modal-close-fisher').addEventListener('click',   () => closeModal(modals.fisher));
 $('#modal-close-qr').addEventListener('click',       () => closeModal(modals.qr));
 $('#modal-close-settings').addEventListener('click', () => closeModal(modals.settings));
 $('#modal-close-podminky').addEventListener('click', () => closeModal(modals.podminky));
+if ($('#modal-close-admin-pin')) $('#modal-close-admin-pin').addEventListener('click', () => closeModal(modals.adminPin));
 $('#btn-podminky').addEventListener('click', e => { e.preventDefault(); openModal(modals.podminky); });
+
+// Odeslání PINu správce
+$('#admin-pin-form')?.addEventListener('submit', async e => {
+    e.preventDefault();
+    const pin = $('#admin-pin-input').value.trim();
+    if (!pin) { showToast('Zadejte PIN', 'warning'); return; }
+    const r = await checkAdminPin(pin);
+    if (!r.ok) { showToast(r.msg, 'danger'); return; }
+    setAdminUnlocked(true);
+    closeModal(modals.adminPin);
+    $('#admin-pin-input').value = '';
+    renderFishers();
+    showToast('Přihlášen jako správce', 'success');
+});
+
+// Uložení nového PINu v Nastavení
+$('#btn-save-pin')?.addEventListener('click', async () => {
+    const newPin = $('#settings-pin-new').value.trim();
+    const conf  = $('#settings-pin-confirm').value.trim();
+    if (newPin.length < 4 || newPin.length > 8) { showToast('PIN musí mít 4–8 číslic', 'warning'); return; }
+    if (newPin !== conf) { showToast('PINy se neshodují', 'danger'); return; }
+    const hash = await hashPin(newPin);
+    setPinHash(hash);
+    $('#settings-pin-new').value = '';
+    $('#settings-pin-confirm').value = '';
+    showToast('PIN správce uložen', 'success');
+});
 
 // ── Helpers ──
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
@@ -155,6 +187,35 @@ function fmtTime(ts)      { return new Date(ts).toLocaleTimeString('cs-CZ', { ho
 function fmtDateShort(ds) { return new Date(ds+'T12:00:00').toLocaleDateString('cs-CZ', { weekday:'short', day:'numeric', month:'numeric' }); }
 function initials(name)   { return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2); }
 function getAppUrl()      { return (window.location.protocol === 'file:') ? BASE_URL + '/index.html' : window.location.origin + window.location.pathname; }
+
+// ── Režim správce (přidávání / úpravy držitelů jen po zadání PINu)
+function isAdminMode() {
+    try { return sessionStorage.getItem(LS.ADMIN) === '1'; } catch (_) { return false; }
+}
+function setAdminUnlocked(yes) {
+    try {
+        if (yes) sessionStorage.setItem(LS.ADMIN, '1');
+        else sessionStorage.removeItem(LS.ADMIN);
+    } catch (_) {}
+}
+async function hashPin(pin) {
+    const buf = new TextEncoder().encode(pin);
+    const hash = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function getStoredPinHash() {
+    try { return localStorage.getItem(LS.ADMIN_PIN) || ''; } catch (_) { return ''; }
+}
+function setPinHash(hash) {
+    try { localStorage.setItem(LS.ADMIN_PIN, hash); } catch (_) {}
+}
+async function checkAdminPin(pin) {
+    const stored = getStoredPinHash();
+    if (!stored) return { ok: false, msg: 'Nejdříve nastavte PIN správce v Nastavení (⚙️).' };
+    const h = await hashPin(pin);
+    if (h !== stored) return { ok: false, msg: 'Nesprávný PIN.' };
+    return { ok: true };
+}
 
 // ── Sync bar ──
 function updateSyncBar() {
@@ -268,6 +329,20 @@ $('#fisher-form').addEventListener('submit', e => {
 
 function renderFishers() {
     const list = $('#fishers-list'), empty = $('#no-fishers');
+    const admin = isAdminMode();
+    const addBtn = $('#btn-new-fisher');
+    const adminHint = $('#admin-hint');
+    const adminLogout = $('#link-admin-logout');
+    if (addBtn) addBtn.style.display = admin ? '' : 'none';
+    if (adminLogout) adminLogout.style.display = admin ? '' : 'none';
+    if (adminHint) {
+        if (admin) { adminHint.style.display = 'none'; }
+        else {
+            adminHint.style.display = 'block';
+            adminHint.innerHTML = 'Nové držitele přidávejte pouze přes QR kód (tlačítko výše) nebo <a href="#" id="link-admin-pin">zadejte PIN správce</a>.';
+        }
+    }
+
     if (!fishers.length) { list.innerHTML=''; empty.style.display='block'; return; }
     empty.style.display = 'none';
 
@@ -275,16 +350,17 @@ function renderFishers() {
     list.innerHTML = sorted.map(f => {
         const todayCI     = checkins.filter(c => c.fisherId === f.id && c.date === today()).length;
         const yearCatches = catches.filter(c => c.fisherId === f.id && c.timestamp?.startsWith(new Date().getFullYear().toString())).length;
+        const actions = admin ? `<div class="fisher-actions">
+                <button class="btn btn-secondary btn-sm" onclick="window._editFisher('${f.id}')">✏️</button>
+                <button class="btn btn-danger btn-sm" onclick="window._deleteFisher('${f.id}')">🗑</button>
+            </div>` : '';
         return `<div class="fisher-card">
             <div class="fisher-avatar">${esc(initials(f.name))}</div>
             <div class="fisher-info">
                 <div class="fisher-name">${esc(f.name)}</div>
                 <div class="fisher-sub">${f.number ? '🪪 '+esc(f.number)+' · ' : ''}📅 ${yearCatches} úlovků letos${todayCI ? ' · <span style="color:var(--success);font-weight:700">✓ Dnes</span>' : ''}</div>
             </div>
-            <div class="fisher-actions">
-                <button class="btn btn-secondary btn-sm" onclick="window._editFisher('${f.id}')">✏️</button>
-                <button class="btn btn-danger btn-sm" onclick="window._deleteFisher('${f.id}')">🗑</button>
-            </div>
+            ${actions}
         </div>`;
     }).join('');
 }
@@ -652,5 +728,20 @@ $('#catch-date').value = today();
 $('#visit-date').value = today();
 
 handleUrlAction();
+// Klik na "zadejte PIN správce" otevře modal
+document.addEventListener('click', e => {
+    if (e.target.id === 'link-admin-pin') {
+        e.preventDefault();
+        openModal(modals.adminPin);
+        $('#admin-pin-input').value = '';
+        $('#admin-pin-input').focus();
+    }
+    if (e.target.id === 'link-admin-logout') {
+        e.preventDefault();
+        setAdminUnlocked(false);
+        renderFishers();
+        showToast('Odhlášeno ze správce');
+    }
+});
 
 })();

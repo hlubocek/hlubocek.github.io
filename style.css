@@ -137,6 +137,19 @@ main { max-width: 640px; margin: 0 auto; padding: 1rem; }
     grid-template-columns: 1fr 1fr;
     gap: .65rem;
 }
+.form-row-2 .form-group label {
+    min-height: 2.5em;
+    line-height: 1.35;
+}
+.admin-hint {
+    font-size: .85rem;
+    color: var(--text-secondary);
+    margin: -.25rem 0 .75rem 0;
+}
+.admin-hint a { color: var(--primary); font-weight: 600; }
+.admin-hint a:hover { text-decoration: underline; }
+.admin-logout { font-size: .8rem; color: var(--text-secondary); margin-left: .25rem; }
+.admin-logout:hover { color: var(--primary); text-decoration: underline; }
 
 /* ── CHECKBOX ROW ── */
 .check-row {
