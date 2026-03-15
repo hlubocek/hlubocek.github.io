@@ -4,14 +4,14 @@
 // ════════════════════════════════════════
 // KONFIGURACE
 // ════════════════════════════════════════
-const LOCATION  = 'Hlybuček';
+const LOCATION  = 'Hluboček';
 const SPECIES   = 'Kapr';
 const MIN_LEN   = 45;
 const MAX_LEN   = 60;
 const FEE_BASE  = 300;
 const FEE_CARP  = 400;
 
-const BASE_URL  = 'https://pavel-vrtal-ict.github.io/rybari-registrace';
+const BASE_URL  = 'https://hlubocek.github.io';
 
 const FB_CONFIG = {
     apiKey:      'AIzaSyCVHqWBRA73byFuJwUaLmBSXGGbPn1k8II',
@@ -135,7 +135,8 @@ function showToast(msg, type) {
 const modals = {
     fisher:   $('#modal-fisher'),
     qr:       $('#modal-qr'),
-    settings: $('#modal-settings')
+    settings: $('#modal-settings'),
+    podminky: $('#modal-podminky')
 };
 function openModal(m)  { m.classList.add('open');    document.body.style.overflow = 'hidden'; }
 function closeModal(m) { m.classList.remove('open'); document.body.style.overflow = ''; }
@@ -143,6 +144,8 @@ Object.values(modals).forEach(m => m && m.addEventListener('click', e => { if (e
 $('#modal-close-fisher').addEventListener('click',   () => closeModal(modals.fisher));
 $('#modal-close-qr').addEventListener('click',       () => closeModal(modals.qr));
 $('#modal-close-settings').addEventListener('click', () => closeModal(modals.settings));
+$('#modal-close-podminky').addEventListener('click', () => closeModal(modals.podminky));
+$('#btn-podminky').addEventListener('click', e => { e.preventDefault(); openModal(modals.podminky); });
 
 // ── Helpers ──
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }

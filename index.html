@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hlybuček – Evidence rybolovu</title>
+    <title>Hluboček – Evidence rybolovu</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -13,8 +13,9 @@
 
     <header>
         <div class="header-content">
-            <h1>🎣 Hlybuček</h1>
+            <h1>🎣 Hluboček</h1>
             <p class="subtitle">Evidence rybolovu · Kapr 45–60 cm</p>
+            <a href="#" class="header-link" id="btn-podminky">Rybářský řád</a>
         </div>
         <button class="header-settings-btn" id="btn-open-settings" title="Nastavení">⚙️</button>
     </header>
@@ -167,7 +168,7 @@
     <div id="reg-overlay" class="checkin-overlay" style="display:none;">
         <div class="checkin-card">
             <div class="checkin-fish-icon">🎣</div>
-            <h2>Hlybuček</h2>
+            <h2>Hluboček</h2>
             <p class="checkin-location">📍 Registrace nového člena</p>
             <form id="reg-form" style="text-align:left;margin-top:1.1rem;">
                 <div class="form-group">
@@ -224,6 +225,28 @@
                     Nový člen naskenuje kód a vyplní registrační formulář. Vyvěste na nástěnce u rybníka.
                 </p>
                 <div id="qr-canvas-wrap" style="display:flex;justify-content:center;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Rybářský řád -->
+    <div id="modal-podminky" class="modal-overlay">
+        <div class="modal modal-podminky">
+            <div class="modal-header">
+                <h3>📋 Rybářský řád</h3>
+                <button class="modal-close" id="modal-close-podminky">&times;</button>
+            </div>
+            <div class="podminky-body">
+                <a href="Rybarsky-rad-Hlubocek.pdf" target="_blank" rel="noopener" class="podminky-pdf-link">📄 Otevřít Rybářský řád (PDF)</a>
+                <p><strong>Rybník Hluboček – rybářský řád</strong></p>
+                <ul>
+                    <li>Rybolov pouze pro registrované členy.</li>
+                    <li>Povolený odchov kapra v rozmezí 45–60 cm.</li>
+                    <li>Případný odnos ryby domů je nutné zapsat v aplikaci (úlovek).</li>
+                    <li>Návštěvy (nečlenové) pouze v doprovodu člena; poplatek dle ceníku (300 Kč, při odnosu kapra +400 Kč).</li>
+                    <li>Docházku a úlovky je třeba evidovat v den rybolovu.</li>
+                </ul>
+                <p>Aplikace slouží k evidenci členů, docházky, úlovků a návštěv. Data mohou být sdílena přes Firebase mezi zařízeními.</p>
             </div>
         </div>
     </div>

@@ -54,6 +54,11 @@ header .subtitle { font-size: 0.8rem; opacity: .85; margin-top: .1rem; }
     display: flex; align-items: center; justify-content: center; transition: background .2s;
 }
 .header-settings-btn:hover { background: rgba(255,255,255,.3); }
+.header-link {
+    display: inline-block; margin-top: .35rem; font-size: .78rem; color: rgba(255,255,255,.9);
+    text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.header-link:hover { color: #fff; }
 
 /* ── SYNC BAR ── */
 .sync-bar {
@@ -319,6 +324,18 @@ main { max-width: 640px; margin: 0 auto; padding: 1rem; }
     color: var(--text-secondary); cursor: pointer; transition: all .2s;
 }
 .modal-close:hover { background: var(--border); color: var(--text); }
+.podminky-body {
+    font-size: .9rem; line-height: 1.6; color: var(--text); max-height: 60vh; overflow-y: auto;
+}
+.podminky-pdf-link {
+    display: inline-flex; align-items: center; gap: .4rem;
+    padding: .6rem 1rem; margin-bottom: 1rem; background: var(--primary); color: #fff;
+    border-radius: var(--radius-sm); font-weight: 600; text-decoration: none; font-size: .95rem;
+}
+.podminky-pdf-link:hover { background: var(--primary-light); color: #fff; }
+.podminky-body p { margin-bottom: .75rem; }
+.podminky-body ul { margin: .5rem 0 .75rem 1.25rem; }
+.podminky-body li { margin-bottom: .35rem; }
 
 /* ── FORMS ── */
 .form-group { margin-bottom: .9rem; }
