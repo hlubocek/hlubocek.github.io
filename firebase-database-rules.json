@@ -1,0 +1,20 @@
+{
+  "rules": {
+    "fishers": {
+      ".read": true,
+      ".write": true
+    },
+    "checkins": {
+      ".read": true,
+      ".write": true
+    },
+    "catches": {
+      ".read": true,
+      ".write": true
+    },
+    "visitors": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}

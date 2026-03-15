@@ -12,10 +12,11 @@ const FEE_VISIT = 300;  // poplatek za návštěvu / 24 h (dle řádu; návště
 
 const BASE_URL  = 'https://hlubocek.github.io';
 
+// Výchozí Firebase – databáze hlubocek (všichni uživatelé se k ní automaticky připojí).
 const FB_CONFIG = {
-    apiKey:      'AIzaSyCVHqWBRA73byFuJwUaLmBSXGGbPn1k8II',
-    databaseURL: 'https://pavel-vrtal-rybari-registrace-default-rtdb.europe-west1.firebasedatabase.app',
-    projectId:   'pavel-vrtal-rybari-registrace'
+    apiKey:      'AIzaSyBjFVu6IoWeEQOv1vevEKctAlMOMgAoc2E',
+    databaseURL: 'https://hlubocek-default-rtdb.europe-west1.firebasedatabase.app',
+    projectId:   'hlubocek'
 };
 
 const LS = {
@@ -164,7 +165,7 @@ function updateSyncBar() {
         btn.style.display = 'none';
     } else {
         bar.className = 'sync-bar sync-local';
-        icon.textContent = '💾'; text.textContent = 'Lokální režim – nastav Firebase pro sdílení';
+        icon.textContent = '💾'; text.textContent = 'Lokální režim – data jen zde. Pro sdílení: otevřete hlubocek.github.io nebo v ⚙️ nastavte Firebase (a v Firebase Console nastavte Rules).';
         btn.style.display = '';
     }
 }
@@ -587,8 +588,8 @@ function initYearSelectors() {
 // NASTAVENÍ
 // ════════════════════════════════════════
 function openSettings() {
-    $('#settings-firebase-url').value = localStorage.getItem(LS.FB_URL) || '';
-    $('#settings-firebase-key').value = localStorage.getItem(LS.FB_KEY) || '';
+    $('#settings-firebase-url').value = localStorage.getItem(LS.FB_URL) || FB_CONFIG.databaseURL;
+    $('#settings-firebase-key').value = localStorage.getItem(LS.FB_KEY) || FB_CONFIG.apiKey;
     $('#btn-disconnect-firebase').style.display = fbReady ? '' : 'none';
     updateFbStatusBox();
     openModal(modals.settings);
@@ -636,9 +637,10 @@ checkins = lsLoad(LS.CHECKINS);
 catches  = lsLoad(LS.CATCHES);
 visitors = lsLoad(LS.VISITORS);
 
+// Vždy zkusit připojit Firebase (i při stažené aplikaci) – nejdřív výchozí config z kódu
 const fbUrl = localStorage.getItem(LS.FB_URL) || FB_CONFIG.databaseURL;
 const fbKey = localStorage.getItem(LS.FB_KEY) || FB_CONFIG.apiKey;
-initFirebase(fbUrl, fbKey);
+if (fbUrl && fbKey) initFirebase(fbUrl, fbKey);
 
 updateSyncBar();
 initYearSelectors();
