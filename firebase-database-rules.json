@@ -19,6 +19,10 @@
     "activity": {
       ".read": true,
       ".write": true
+    },
+    "config": {
+      ".read": true,
+      ".write": true
     }
   }
 }

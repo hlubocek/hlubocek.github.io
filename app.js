@@ -40,6 +40,7 @@ let checkins  = [];
 let catches   = [];
 let visitors  = [];
 let activity  = [];
+let cachedPinHash = '';
 
 function lsLoad(k)    { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } }
 function lsSave(k, d) { localStorage.setItem(k, JSON.stringify(d)); }
@@ -59,6 +60,18 @@ function initFirebase(dbUrl, apiKey) {
 }
 
 function setupListeners() {
+    db.ref('config/pinHash').on('value', function(s) {
+        var v = s.val();
+        cachedPinHash = (v && typeof v === 'string') ? v : '';
+        if (cachedPinHash) try { localStorage.setItem(LS.ADMIN_PIN, cachedPinHash); } catch(_) {}
+    });
+    db.ref('config/pinHash').once('value').then(function(s) {
+        if (s.val()) return;
+        try {
+            var local = localStorage.getItem(LS.ADMIN_PIN);
+            if (local && local.length === 64) db.ref('config/pinHash').set(local);
+        } catch(_) {}
+    }).catch(function() {});
     db.ref('fishers').on('value',  s => { fishers  = s.val() ? Object.values(s.val()) : []; lsSave(LS.FISHERS,  fishers);  updateSyncBar(); rerender(); });
     db.ref('checkins').on('value', s => { checkins = s.val() ? Object.values(s.val()) : []; lsSave(LS.CHECKINS, checkins); rerender(); });
     db.ref('catches').on('value',  s => { catches  = s.val() ? Object.values(s.val()) : []; lsSave(LS.CATCHES,  catches);  rerender(); });
@@ -69,15 +82,20 @@ function setupListeners() {
         activity = activity.filter(function(a) { return a.type === 'registration'; }).sort(function(a, b) { return (b.at || '').localeCompare(a.at || ''); });
         rerender();
     });
-    // Vynucení prvního načtení (na mobilu může přijít listener později)
-    db.ref('fishers').once('value').then(function(s) {
-        var v = s.val();
-        if (v) {
-            fishers = Object.values(v);
-            lsSave(LS.FISHERS, fishers);
-            updateSyncBar();
-            rerender();
-        }
+    // Okamžité načtení všech dat (rybáři, úlovky, docházka, návštěvy) – spolehlivé na všech zařízeních
+    Promise.all([
+        db.ref('fishers').once('value'),
+        db.ref('checkins').once('value'),
+        db.ref('catches').once('value'),
+        db.ref('visitors').once('value')
+    ]).then(function(ss) {
+        fishers  = ss[0].val() ? Object.values(ss[0].val()) : [];
+        checkins = ss[1].val() ? Object.values(ss[1].val()) : [];
+        catches  = ss[2].val() ? Object.values(ss[2].val()) : [];
+        visitors = ss[3].val() ? Object.values(ss[3].val()) : [];
+        lsSave(LS.FISHERS, fishers); lsSave(LS.CHECKINS, checkins); lsSave(LS.CATCHES, catches); lsSave(LS.VISITORS, visitors);
+        updateSyncBar();
+        rerender();
     }).catch(function() {});
 }
 
@@ -228,7 +246,7 @@ $('#btn-save-pin')?.addEventListener('click', async () => {
     setPinHash(hash);
     $('#settings-pin-new').value = '';
     $('#settings-pin-confirm').value = '';
-    showToast('PIN správce uložen', 'success');
+    showToast(fbReady ? 'PIN správce uložen do databáze (platí všude)' : 'PIN správce uložen', 'success');
 });
 
 // ── Helpers ──
@@ -256,13 +274,23 @@ async function hashPin(pin) {
     return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 function getStoredPinHash() {
+    if (cachedPinHash) return cachedPinHash;
     try { return localStorage.getItem(LS.ADMIN_PIN) || ''; } catch (_) { return ''; }
 }
 function setPinHash(hash) {
+    cachedPinHash = hash;
     try { localStorage.setItem(LS.ADMIN_PIN, hash); } catch (_) {}
+    if (fbReady && db) db.ref('config/pinHash').set(hash);
 }
 async function checkAdminPin(pin) {
-    const stored = getStoredPinHash();
+    var stored = getStoredPinHash();
+    if (!stored && fbReady && db) {
+        try {
+            var snap = await db.ref('config/pinHash').once('value');
+            var v = snap.val();
+            if (v && typeof v === 'string') { cachedPinHash = v; stored = v; }
+        } catch (_) {}
+    }
     if (!stored) return { ok: false, msg: 'Nejdříve nastavte PIN správce v Nastavení (⚙️).' };
     const h = await hashPin(pin);
     if (h !== stored) return { ok: false, msg: 'Nesprávný PIN.' };
@@ -370,9 +398,9 @@ if (regConfirmEl) regConfirmEl.addEventListener('change', function() {
 });
 $('#reg-submit-btn').addEventListener('click', function() {
     if (this.disabled) {
-        var strip = $('#reg-warning-strip'), scrollEl = $('#reg-rad-scroll');
-        if (strip) strip.style.display = 'flex';
-        if (scrollEl) scrollEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        var strip = $('#reg-warning-strip'), card = $('#reg-card');
+        if (strip) { strip.style.display = 'flex'; strip.setAttribute('aria-live', 'assertive'); }
+        if (card) card.scrollTop = 0;
     }
 });
 
@@ -381,10 +409,9 @@ $('#reg-form').addEventListener('submit', e => {
     const name = $('#reg-name').value.trim();
     if (!name) return;
     if (!$('#reg-rad-confirm').checked) {
-        var strip = $('#reg-warning-strip');
-        if (strip) strip.style.display = 'flex';
-        var scrollEl = $('#reg-rad-scroll');
-        if (scrollEl) scrollEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        var strip = $('#reg-warning-strip'), card = $('#reg-card');
+        if (strip) { strip.style.display = 'flex'; strip.setAttribute('aria-live', 'assertive'); }
+        if (card) card.scrollTop = 0;
         showToast('Potvrďte přečtení rybářského řádu.', 'warning');
         return;
     }
