@@ -424,6 +424,8 @@ main { max-width: 640px; margin: 0 auto; padding: 1rem; }
     border-bottom: 2px solid var(--primary);
 }
 .settings-section h4 { font-size: .92rem; font-weight: 700; margin-bottom: .3rem; }
+.settings-danger-section { border: 1px solid var(--danger); background: rgba(198, 40, 40, 0.06); border-radius: var(--radius-sm); padding: 1rem; }
+.settings-danger-section .btn { margin-top: 0.5rem; }
 .settings-desc { font-size: .8rem; color: var(--text-secondary); margin-bottom: .65rem; line-height: 1.5; }
 .fb-status-ok   { padding:.55rem;border-radius:var(--radius-sm);background:#e6f4ea;color:var(--success);font-weight:600;font-size:.83rem;margin-bottom:.65rem; }
 .fb-status-warn { padding:.55rem;border-radius:var(--radius-sm);background:#fff3cd;color:#856404;font-weight:600;font-size:.83rem;margin-bottom:.65rem; }

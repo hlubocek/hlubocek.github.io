@@ -867,6 +867,8 @@ function openSettings() {
     $('#settings-firebase-url').value = localStorage.getItem(LS.FB_URL) || FB_CONFIG.databaseURL;
     $('#settings-firebase-key').value = localStorage.getItem(LS.FB_KEY) || FB_CONFIG.apiKey;
     $('#btn-disconnect-firebase').style.display = fbReady ? '' : 'none';
+    var clearWrap = $('#settings-clear-data-wrap');
+    if (clearWrap) clearWrap.style.display = (isAdminMode() && fbReady) ? 'block' : 'none';
     updateFbStatusBox();
     openModal(modals.settings);
     var modalEl = modals.settings && modals.settings.querySelector('.modal');
@@ -905,6 +907,26 @@ $('#btn-disconnect-firebase').addEventListener('click', () => {
     updateSyncBar(); updateFbStatusBox();
     $('#btn-disconnect-firebase').style.display = 'none';
     showToast('Firebase odpojena', 'warning');
+});
+
+$('#btn-clear-all-data').addEventListener('click', function() {
+    if (!isAdminMode() || !fbReady || !db) return;
+    if (!confirm('Opravdu smazat VŠECHNA data z databáze?\n\n• Všichni rybáři (držitelé povolenky)\n• Všechny úlovky\n• Veškerá docházka\n• Všechny návštěvy\n\nPIN a nastavení zůstanou. Tuto akci nelze vrátit.')) return;
+    if (!confirm('Naposledy: opravdu smazat všechna data?')) return;
+    showToast('Mažu data…', 'info');
+    Promise.all([
+        db.ref('fishers').remove(),
+        db.ref('checkins').remove(),
+        db.ref('catches').remove(),
+        db.ref('visitors').remove()
+    ]).then(function() {
+        fishers = []; checkins = []; catches = []; visitors = [];
+        lsSave(LS.FISHERS, fishers); lsSave(LS.CHECKINS, checkins); lsSave(LS.CATCHES, catches); lsSave(LS.VISITORS, visitors);
+        updateSyncBar();
+        rerender();
+        closeModal(modals.settings);
+        showToast('Všechna data z databáze smazána', 'success');
+    }).catch(function() { showToast('Nepodařilo se smazat data', 'danger'); });
 });
 
 // ════════════════════════════════════════
