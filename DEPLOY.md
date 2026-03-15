@@ -1,5 +1,7 @@
 # Nasazení na https://hlubocek.github.io
 
+**Důležité:** Změny v tomto projektu (včetně formuláře s Rybářským řádem u QR registrace) se na živé stránce projeví až po pushnutí do repozitáře, ze kterého běží GitHub Pages (typicky `hlubocek/hlubocek.github.io`). Bez toho zůstane na hlubocek.github.io stará verze.
+
 Aby aplikace běžela na této adrese, musí být na GitHubu **organizace** nebo **účet** s názvem **hlubocek** a repozitář přesně **hlubocek.github.io**.
 
 ## Kroky

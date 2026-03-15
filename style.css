@@ -59,6 +59,8 @@ header .subtitle { font-size: 0.8rem; opacity: .85; margin-top: .1rem; }
     text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
 }
 .header-link:hover { color: #fff; }
+#btn-settings-link { margin-left: .6rem; }
+.header-settings-btn { min-width: 44px; min-height: 44px; }
 
 /* ── SYNC BAR ── */
 .sync-bar {
@@ -222,6 +224,10 @@ main { max-width: 640px; margin: 0 auto; padding: 1rem; }
     position: fixed; inset: 0; background: linear-gradient(160deg, var(--primary-dark), var(--primary));
     z-index: 500; display: flex; align-items: center; justify-content: center; padding: 1.5rem;
 }
+#reg-overlay .checkin-card {
+    max-height: 90vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    text-align: center;
+}
 .checkin-card {
     background: #fff; border-radius: 20px; padding: 2rem 1.5rem;
     width: 100%; max-width: 420px; box-shadow: var(--shadow-lg); text-align: center;
@@ -231,6 +237,27 @@ main { max-width: 640px; margin: 0 auto; padding: 1rem; }
 .checkin-fish-icon { font-size: 3.5rem; display: block; margin-bottom: .5rem; }
 .checkin-card h2  { font-size: 1.5rem; color: var(--primary); margin-bottom: .25rem; }
 .checkin-location { font-size: .95rem; color: var(--text-secondary); }
+.reg-rad-intro { margin: .75rem 0 .5rem 0; }
+.reg-rad-pdf-link {
+    display: inline-block; padding: .5rem .9rem; background: var(--primary); color: #fff;
+    border-radius: var(--radius-sm); font-weight: 600; font-size: .9rem; text-decoration: none;
+}
+.reg-rad-pdf-link:hover { background: var(--primary-light); color: #fff; }
+.reg-rad-scroll {
+    max-height: 180px; overflow-y: auto; margin: .75rem 0 1rem 0; padding: .85rem;
+    background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    font-size: .85rem; line-height: 1.45; text-align: left;
+    -webkit-overflow-scrolling: touch;
+}
+.reg-rad-scroll ul { margin: .4rem 0 .5rem 1.1rem; }
+.reg-rad-scroll li { margin-bottom: .25rem; }
+.reg-rad-full { margin-top: .5rem; font-size: .8rem; color: var(--text-secondary); }
+.reg-rad-confirm-label {
+    display: flex; align-items: flex-start; gap: .6rem; margin-top: 1rem; padding-top: .75rem;
+    border-top: 1px solid var(--border); cursor: pointer; font-weight: 600; font-size: .88rem;
+}
+.reg-rad-confirm-label input[type="checkbox"] { width: 20px; height: 20px; margin-top: .1rem; flex-shrink: 0; accent-color: var(--primary); }
+.reg-rad-confirm-label input:disabled { cursor: not-allowed; opacity: .7; }
 
 /* ── DOCHÁZKA ── */
 .day-group { margin-bottom: 1.25rem; }
@@ -373,6 +400,11 @@ main { max-width: 640px; margin: 0 auto; padding: 1rem; }
 
 /* ── SETTINGS ── */
 .settings-section { margin-bottom: 1rem; }
+.settings-pin-section {
+    padding: 1rem; margin: 0 -1.25rem 1rem -1.25rem; padding-left: 1.25rem; padding-right: 1.25rem;
+    background: var(--surface-alt); border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    border-bottom: 2px solid var(--primary);
+}
 .settings-section h4 { font-size: .92rem; font-weight: 700; margin-bottom: .3rem; }
 .settings-desc { font-size: .8rem; color: var(--text-secondary); margin-bottom: .65rem; line-height: 1.5; }
 .fb-status-ok   { padding:.55rem;border-radius:var(--radius-sm);background:#e6f4ea;color:var(--success);font-weight:600;font-size:.83rem;margin-bottom:.65rem; }

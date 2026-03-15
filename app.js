@@ -264,13 +264,58 @@ function handleUrlAction() {
 // ════════════════════════════════════════
 function showRegOverlay() {
     $('#reg-form').reset();
+    var scrollEl = $('#reg-rad-scroll'), checkEl = $('#reg-rad-confirm'), btn = $('#reg-submit-btn'), hint = $('#reg-rad-confirm-text');
+    if (scrollEl) { scrollEl.scrollTop = 0; }
+    if (checkEl) { checkEl.checked = false; checkEl.disabled = true; }
+    if (btn) btn.disabled = true;
+    if (hint) hint.textContent = 'Dojeďte dolů, poté zde potvrďte přečtení řádu.';
     $('#reg-overlay').style.display = 'flex';
+    if (window._regNoScrollTimer) { clearTimeout(window._regNoScrollTimer); window._regNoScrollTimer = null; }
+    if (window._regScrollTimer) clearTimeout(window._regScrollTimer);
+    window._regScrollTimer = setTimeout(function() { try { regCheckScrollEnd(); } catch (_) {} }, 300);
 }
+
+function regCheckScrollEnd() {
+    var el = $('#reg-rad-scroll'), check = $('#reg-rad-confirm'), hint = $('#reg-rad-confirm-text');
+    if (!el || !check) return;
+    var scrollable = el.scrollHeight > el.clientHeight + 15;
+    var atBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 25;
+    if (scrollable && atBottom) {
+        if (window._regNoScrollTimer) { clearTimeout(window._regNoScrollTimer); window._regNoScrollTimer = null; }
+        check.disabled = false;
+        if (hint) hint.textContent = 'Potvrzuji, že jsem se seznámil(a) s rybářským řádem a souhlasím s ním.';
+    } else if (!scrollable) {
+        if (window._regNoScrollTimer) return;
+        window._regNoScrollTimer = setTimeout(function() {
+            window._regNoScrollTimer = null;
+            check.disabled = false;
+            if (hint) hint.textContent = 'Potvrzuji, že jsem se seznámil(a) s rybářským řádem a souhlasím s ním.';
+        }, 3000);
+    }
+}
+
+var regScrollEl = $('#reg-rad-scroll');
+if (regScrollEl) {
+    regScrollEl.addEventListener('scroll', function() {
+        if (window._regNoScrollTimer) { clearTimeout(window._regNoScrollTimer); window._regNoScrollTimer = null; }
+        regCheckScrollEnd();
+    });
+    regScrollEl.addEventListener('touchend', function() { regCheckScrollEnd(); }, { passive: true });
+}
+var regConfirmEl = $('#reg-rad-confirm');
+if (regConfirmEl) regConfirmEl.addEventListener('change', function() {
+    var btn = $('#reg-submit-btn');
+    if (btn) btn.disabled = !$('#reg-rad-confirm').checked;
+});
 
 $('#reg-form').addEventListener('submit', e => {
     e.preventDefault();
     const name = $('#reg-name').value.trim();
     if (!name) return;
+    if (!$('#reg-rad-confirm').checked) {
+        showToast('Potvrďte přečtení rybářského řádu.', 'warning');
+        return;
+    }
     const id   = genId();
     const data = {
         id, name,
@@ -279,9 +324,13 @@ $('#reg-form').addEventListener('submit', e => {
         registeredAt: new Date().toISOString()
     };
     dbSet('fishers', id, data);
-    if (!fbReady) { fishers.push(data); renderFishers(); populateFisherSelects(); }
+    var idx = fishers.findIndex(function(f) { return f.id === id; });
+    if (idx >= 0) fishers[idx] = data; else fishers.push(data);
+    lsSave(LS.FISHERS, fishers);
+    renderFishers();
+    populateFisherSelects();
     $('#reg-overlay').style.display = 'none';
-    showToast(`✅ ${name} zaregistrován(a)!`, 'success');
+    showToast('✅ ' + name + ' zaregistrován(a)!', 'success');
 });
 
 // ════════════════════════════════════════
@@ -669,6 +718,8 @@ function openSettings() {
     $('#btn-disconnect-firebase').style.display = fbReady ? '' : 'none';
     updateFbStatusBox();
     openModal(modals.settings);
+    var modalEl = modals.settings && modals.settings.querySelector('.modal');
+    if (modalEl) modalEl.scrollTop = 0;
 }
 
 function updateFbStatusBox() {
@@ -680,6 +731,7 @@ function updateFbStatusBox() {
 }
 
 $('#btn-open-settings').addEventListener('click', openSettings);
+$('#btn-settings-link')?.addEventListener('click', e => { e.preventDefault(); openSettings(); });
 
 $('#btn-save-firebase').addEventListener('click', () => {
     const url = $('#settings-firebase-url').value.trim();

@@ -25,6 +25,7 @@
             <h1>🎣 Hluboček</h1>
             <p class="subtitle">Evidence rybolovu · Kapr 45–60 cm (přisvojení dle řádu)</p>
             <a href="#" class="header-link" id="btn-podminky">Rybářský řád</a>
+            <a href="#" class="header-link" id="btn-settings-link">Nastavení (PIN, Firebase)</a>
         </div>
         <button class="header-settings-btn" id="btn-open-settings" title="Nastavení">⚙️</button>
     </header>
@@ -176,6 +177,24 @@
             <h2>Hluboček</h2>
             <p class="checkin-location">📍 Registrace nového držitele povolenky</p>
             <form id="reg-form" style="text-align:left;margin-top:1.1rem;">
+                <p class="reg-rad-intro">
+                    <a href="Rybarsky-rad-Hlubocek.pdf" target="_blank" rel="noopener" class="reg-rad-pdf-link">📄 Otevřít Rybářský řád (PDF)</a>
+                </p>
+                <div class="reg-rad-scroll" id="reg-rad-scroll">
+                    <p><strong>Výtah z rybářského řádu – pročtěte a dojeďte dolů</strong></p>
+                    <ul>
+                        <li>Rybolov pouze pro držitele povolenek (členy místního rybářského spolku).</li>
+                        <li>Kapr při přisvojení: míra 45–60 cm (dospělý max. 3 ks/rok, 1 ks/den; dítě 8–14 let 1 ks/rok).</li>
+                        <li>Přisvojenou rybu zapsat v aplikaci v den ulovení.</li>
+                        <li>Návštěvy pouze v doprovodu držitele povolenky; poplatek 300 Kč / 24 h. Návštěva si <strong>nesmí přisvojit žádnou rybu</strong>.</li>
+                        <li>Docházku zapsat ihned po příchodu, úlovky a návštěvy evidovat v aplikaci.</li>
+                    </ul>
+                    <p class="reg-rad-full">Plné znění viz PDF výše.</p>
+                    <label class="reg-rad-confirm-label">
+                        <input type="checkbox" id="reg-rad-confirm" required disabled>
+                        <span id="reg-rad-confirm-text">Potvrzuji, že jsem se seznámil(a) s rybářským řádem a souhlasím s ním.</span>
+                    </label>
+                </div>
                 <div class="form-group">
                     <label for="reg-name">Jméno a příjmení</label>
                     <input type="text" id="reg-name" placeholder="Jan Novák" required>
@@ -188,7 +207,7 @@
                     <label for="reg-phone">Telefon</label>
                     <input type="tel" id="reg-phone" placeholder="+420 123 456 789">
                 </div>
-                <button type="submit" class="btn btn-primary btn-full" style="margin-top:.5rem;">Zaregistrovat se</button>
+                <button type="submit" class="btn btn-primary btn-full" id="reg-submit-btn" style="margin-top:.5rem;" disabled>Zaregistrovat se</button>
             </form>
         </div>
     </div>
@@ -280,7 +299,7 @@
                 <h3>⚙️ Nastavení</h3>
                 <button class="modal-close" id="modal-close-settings">&times;</button>
             </div>
-            <div class="settings-section">
+            <div class="settings-section settings-pin-section" id="settings-pin-section">
                 <h4>🔐 PIN správce</h4>
                 <p class="settings-desc">PIN slouží k přihlášení do režimu správce (přidávání a úpravy držitelů povolenky). Nastavte si 4–8 číslic a nezapomeňte je.</p>
                 <div class="form-group">
