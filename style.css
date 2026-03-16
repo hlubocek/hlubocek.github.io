@@ -25,6 +25,11 @@
 .settings-biometric-item { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; padding: .6rem 0; border-bottom: 1px solid var(--border-light); }
 .settings-biometric-item:last-child { border-bottom: none; }
 .settings-biometric-name { font-weight: 600; min-width: 120px; }
+.login-choice-desc { font-size: .9rem; color: var(--text-secondary); margin-bottom: 1rem; }
+.login-choice-btns { display: flex; flex-direction: column; gap: .5rem; }
+.pick-fisher-list { display: flex; flex-direction: column; gap: .5rem; }
+.admin-switch-link { font-size: .9rem; color: var(--primary); font-weight: 600; }
+.admin-switch-link:hover { text-decoration: underline; }
 
 /* ── FISHER PROFILE ── */
 .fisher-header { background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: #fff; padding: 1rem; position: relative; }

@@ -45,6 +45,7 @@ let activity  = [];
 let cachedAdminPinHashes = [];
 let cachedAdminNames = {};
 let cachedWebauthnCredentials = {};  // { credentialIdBase64: fisherId }
+let pendingLoginFisher = null;  // při přihlášení PINem platném pro oba režimy
 
 function lsLoad(k)    { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } }
 function lsSave(k, d) { localStorage.setItem(k, JSON.stringify(d)); }
@@ -247,11 +248,13 @@ function showToast(msg, type) {
 
 // ── Modals ──
 const modals = {
-    fisher:   $('#modal-fisher'),
-    qr:       $('#modal-qr'),
-    settings: $('#modal-settings'),
-    podminky: $('#modal-podminky'),
-    adminPin: $('#modal-admin-pin')
+    fisher:       $('#modal-fisher'),
+    qr:           $('#modal-qr'),
+    settings:     $('#modal-settings'),
+    podminky:     $('#modal-podminky'),
+    adminPin:     $('#modal-admin-pin'),
+    loginChoice:  $('#modal-login-choice'),
+    pickFisher:   $('#modal-pick-fisher')
 };
 function openModal(m)  { if (m) m.classList.add('open');    document.body.style.overflow = 'hidden'; }
 function closeModal(m) { if (m) m.classList.remove('open'); document.body.style.overflow = ''; }
@@ -262,6 +265,8 @@ $('#modal-close-settings').addEventListener('click', () => closeModal(modals.set
 $('#modal-close-podminky').addEventListener('click', () => closeModal(modals.podminky));
 if ($('#modal-close-admin-pin')) $('#modal-close-admin-pin').addEventListener('click', () => closeModal(modals.adminPin));
 $('#btn-podminky').addEventListener('click', e => { e.preventDefault(); openModal(modals.podminky); });
+if ($('#modal-close-login-choice')) $('#modal-close-login-choice').addEventListener('click', function() { pendingLoginFisher = null; closeModal(modals.loginChoice); });
+if ($('#modal-close-pick-fisher')) $('#modal-close-pick-fisher').addEventListener('click', () => closeModal(modals.pickFisher));
 
 // Odeslání PINu správce (spolehlivé na PC i mobilu – event delegation)
 async function doAdminLogin() {
@@ -420,6 +425,14 @@ async function isPinUsedByOther(pin, excludeFisherId) {
         if (excludeFisherId && f.id === excludeFisherId) return false;
         return f.pinHash === h;
     });
+}
+function getAdminFishers() {
+    var hashes = getAdminPinHashes();
+    return fishers.filter(function(f) { return f.pinHash && hashes.indexOf(f.pinHash) >= 0; });
+}
+function isFisherAlsoAdmin(fisher) {
+    if (!fisher || !fisher.pinHash) return false;
+    return getAdminPinHashes().indexOf(fisher.pinHash) >= 0;
 }
 async function generateUniqueFisherPin() {
     var used = new Set();
@@ -621,6 +634,13 @@ function showLoginScreen() {
     $('#login-screen').style.display = 'flex';
     $('#app-wrapper').style.display = 'none';
     $('#fisher-profile').style.display = 'none';
+    document.querySelectorAll('.modal-overlay.open').forEach(function(m) { m.classList.remove('open'); });
+    document.body.style.overflow = '';
+    pendingLoginFisher = null;
+    var pinInput = $('#login-pin');
+    if (pinInput) { pinInput.value = ''; pinInput.disabled = false; setTimeout(function() { pinInput.focus(); }, 100); }
+    var submitBtn = $('#login-submit');
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Přihlásit'; }
     updateBiometricLoginVisibility();
 }
 function showAdminView() {
@@ -726,6 +746,8 @@ function renderFishers() {
     const adminLogout = $('#link-admin-logout');
     if (addBtn) addBtn.style.display = admin ? '' : 'none';
     if (adminLogout) adminLogout.style.display = admin ? '' : 'none';
+    var switchLink = $('#link-switch-to-fisher');
+    if (switchLink) switchLink.style.display = (admin && getAdminFishers().length > 0) ? '' : 'none';
     if (adminHint) {
         if (admin) { adminHint.style.display = 'none'; }
         else {
@@ -1267,18 +1289,20 @@ $('#login-form').addEventListener('submit', async function(e) {
                 if (old.val()) { adminHashes = [old.val()]; setAdminPinHashes(adminHashes); }
             }
         }
-        if (adminHashes.indexOf(h) >= 0) {
+        var fisher = fishers.find(function(f) { return f.pinHash === h; });
+        var isAdmin = adminHashes.indexOf(h) >= 0;
+        if (isAdmin && fisher) {
+            pendingLoginFisher = fisher;
+            openModal(modals.loginChoice);
+        } else if (isAdmin) {
             try { localStorage.removeItem(LS.FISHER_ID); } catch (_) {}
             showAdminView();
             showToast('Přihlášen jako správce', 'success');
+        } else if (fisher) {
+            showFisherView(fisher);
+            showToast('Vítejte, ' + fisher.name, 'success');
         } else {
-            var fisher = fishers.find(function(f) { return f.pinHash === h; });
-            if (fisher) {
-                showFisherView(fisher);
-                showToast('Vítejte, ' + fisher.name, 'success');
-            } else {
-                showToast('Nesprávný PIN', 'danger');
-            }
+            showToast('Nesprávný PIN', 'danger');
         }
     } catch (err) {
         console.error(err);
@@ -1288,12 +1312,62 @@ $('#login-form').addEventListener('submit', async function(e) {
     $('#login-pin').value = '';
 });
 
+// Pending login choice (když PIN platí pro oba režimy)
+$('#login-choice-admin').addEventListener('click', function() {
+    if (pendingLoginFisher) {
+        try { localStorage.removeItem(LS.FISHER_ID); } catch (_) {}
+        showAdminView();
+        showToast('Přihlášen jako správce', 'success');
+        closeModal(modals.loginChoice);
+        pendingLoginFisher = null;
+    }
+});
+$('#login-choice-fisher').addEventListener('click', function() {
+    if (pendingLoginFisher) {
+        showFisherView(pendingLoginFisher);
+        showToast('Vítejte, ' + pendingLoginFisher.name, 'success');
+        closeModal(modals.loginChoice);
+        pendingLoginFisher = null;
+    }
+});
+
+// Přepnutí admin → profil rybáře
+$('#link-switch-to-fisher').addEventListener('click', function(e) {
+    e.preventDefault();
+    var adminFishers = getAdminFishers();
+    if (adminFishers.length === 1) {
+        showFisherView(adminFishers[0]);
+        showToast('Přepnuto na profil rybáře', 'success');
+    } else if (adminFishers.length > 1) {
+        var list = $('#pick-fisher-list');
+        list.innerHTML = adminFishers.map(function(f) {
+            return '<button type="button" class="btn btn-secondary btn-full pick-fisher-btn" data-fisher-id="' + esc(f.id) + '">' + esc(f.name) + '</button>';
+        }).join('');
+        list.querySelectorAll('.pick-fisher-btn').forEach(function(btn) {
+            btn.onclick = function() {
+                var f = adminFishers.find(function(x) { return x.id === btn.dataset.fisherId; });
+                if (f) { showFisherView(f); showToast('Přepnuto na profil', 'success'); closeModal(modals.pickFisher); }
+            };
+        });
+        openModal(modals.pickFisher);
+    }
+});
+
+// Přepnutí rybář → správce
+$('#fisher-switch-admin').addEventListener('click', function() {
+    setAdminUnlocked(true);
+    showAdminView();
+    showToast('Přepnuto na režim správce', 'success');
+});
+
 // ════════════════════════════════════════
 // FISHER PROFILE
 // ════════════════════════════════════════
 function renderFisherProfile(fisher) {
     var fid = fisher.id;
     updateFisherBiometricButtons(fisher);
+    var switchBtn = $('#fisher-switch-admin');
+    if (switchBtn) switchBtn.style.display = isFisherAlsoAdmin(fisher) ? '' : 'none';
     var myCheckins = checkins.filter(function(c) { return c.fisherId === fid; }).sort(function(a,b) { return b.date.localeCompare(a.date); }).slice(0, 15);
     var myCatches = catches.filter(function(c) { return c.fisherId === fid; }).sort(function(a,b) { return b.timestamp.localeCompare(a.timestamp); }).slice(0, 15);
     var myVisitors = visitors.filter(function(v) { return v.fisherId === fid; }).sort(function(a,b) { return b.date.localeCompare(a.date); }).slice(0, 10);
@@ -1497,8 +1571,9 @@ if (isAdminMode()) {
     }
 }
 document.addEventListener('click', function(e) {
-    if (e.target.id === 'link-admin-logout') {
+    if (e.target.closest && e.target.closest('#link-admin-logout')) {
         e.preventDefault();
+        e.stopPropagation();
         setAdminUnlocked(false);
         showLoginScreen();
         showToast('Odhlášeno ze správce');

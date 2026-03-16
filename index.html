@@ -36,6 +36,33 @@
         </div>
     </div>
 
+    <!-- MODAL: Volba režimu (správce vs rybář) -->
+    <div id="modal-login-choice" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>🔐 Přihlásit jako</h3>
+                <button class="modal-close" id="modal-close-login-choice">&times;</button>
+            </div>
+            <p class="login-choice-desc">Váš PIN platí pro oba režimy. Vyberte:</p>
+            <div class="login-choice-btns">
+                <button type="button" class="btn btn-primary btn-full" id="login-choice-admin">👤 Správce (evidence, úlovky, držitelé)</button>
+                <button type="button" class="btn btn-secondary btn-full" id="login-choice-fisher">🎣 Rybář (můj profil, příchody, úlovky)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Výběr profilu rybáře (více admin-rybářů) -->
+    <div id="modal-pick-fisher" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Přepnout na profil</h3>
+                <button class="modal-close" id="modal-close-pick-fisher">&times;</button>
+            </div>
+            <p class="form-hint">Vyberte profil rybáře:</p>
+            <div id="pick-fisher-list" class="pick-fisher-list"></div>
+        </div>
+    </div>
+
     <!-- HLAVNÍ APLIKACE (admin nebo rybář – skryto do přihlášení) -->
     <div id="app-wrapper" style="display:none;">
 
@@ -87,6 +114,7 @@
                 <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
                     <button class="btn btn-secondary btn-sm" id="btn-app-qr">📱 QR odkaz na aplikaci</button>
                     <button class="btn btn-primary" id="btn-new-fisher">+ Přidat rybáře</button>
+                    <a href="#" id="link-switch-to-fisher" class="admin-switch-link" style="display:none">Přepnout na můj profil</a>
                     <a href="#" id="link-admin-logout" class="admin-logout" style="display:none">Odhlásit správce</a>
                 </div>
             </div>
@@ -343,6 +371,7 @@
                 <p class="subtitle" id="fisher-profile-name">—</p>
             </div>
             <div class="fisher-header-btns">
+                <button class="header-settings-btn" id="fisher-switch-admin" title="Přepnout na správce" style="display:none">👤</button>
                 <button class="header-settings-btn" id="fisher-settings" title="Nastavení">⚙️</button>
                 <button class="header-settings-btn" id="fisher-logout" title="Odhlásit">🚪</button>
             </div>
