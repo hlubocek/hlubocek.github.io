@@ -71,6 +71,7 @@ function setupListeners() {
         if (Array.isArray(v)) cachedAdminPinHashes = v;
         else if (v && typeof v === 'object') cachedAdminPinHashes = Object.values(v);
         else cachedAdminPinHashes = [];
+        rerender();
     });
     db.ref('config/adminNames').on('value', function(s) {
         var v = s.val();
@@ -106,17 +107,21 @@ function setupListeners() {
         activity = activity.filter(function(a) { return a.type === 'registration'; }).sort(function(a, b) { return (b.at || '').localeCompare(a.at || ''); });
         rerender();
     });
-    // Okamžité načtení všech dat (rybáři, úlovky, docházka, návštěvy) – spolehlivé na všech zařízeních
+    // Okamžité načtení všech dat (rybáři, úlovky, docházka, návštěvy, admin PINy) – spolehlivé na všech zařízeních
     Promise.all([
         db.ref('fishers').once('value'),
         db.ref('checkins').once('value'),
         db.ref('catches').once('value'),
-        db.ref('visitors').once('value')
+        db.ref('visitors').once('value'),
+        db.ref('config/adminPinHashes').once('value')
     ]).then(function(ss) {
         fishers  = ss[0].val() ? Object.values(ss[0].val()) : [];
         checkins = ss[1].val() ? Object.values(ss[1].val()) : [];
         catches  = ss[2].val() ? Object.values(ss[2].val()) : [];
         visitors = ss[3].val() ? Object.values(ss[3].val()) : [];
+        var v = ss[4].val();
+        if (Array.isArray(v)) cachedAdminPinHashes = v;
+        else if (v && typeof v === 'object') cachedAdminPinHashes = Object.values(v);
         lsSave(LS.FISHERS, fishers); lsSave(LS.CHECKINS, checkins); lsSave(LS.CATCHES, catches); lsSave(LS.VISITORS, visitors);
         updateSyncBar();
         rerender();
