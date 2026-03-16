@@ -1384,12 +1384,15 @@ $('#link-switch-to-fisher').addEventListener('click', function(e) {
     }
 });
 
-// Přepnutí rybář → správce
-$('#fisher-switch-admin').addEventListener('click', function() {
+// Přepnutí rybář → správce (ikona v headeru + tlačítko v obsahu)
+function doSwitchToAdmin() {
     setAdminUnlocked(true);
     showAdminView();
     showToast('Přepnuto na režim správce', 'success');
-});
+}
+$('#fisher-switch-admin').addEventListener('click', doSwitchToAdmin);
+var switchAdminMain = $('#fisher-btn-switch-admin');
+if (switchAdminMain) switchAdminMain.addEventListener('click', doSwitchToAdmin);
 
 // ════════════════════════════════════════
 // FISHER PROFILE
@@ -1397,8 +1400,11 @@ $('#fisher-switch-admin').addEventListener('click', function() {
 function renderFisherProfile(fisher) {
     var fid = fisher.id;
     updateFisherBiometricButtons(fisher);
+    var isAdmin = isFisherAlsoAdmin(fisher);
     var switchBtn = $('#fisher-switch-admin');
-    if (switchBtn) switchBtn.style.display = isFisherAlsoAdmin(fisher) ? '' : 'none';
+    if (switchBtn) switchBtn.style.display = isAdmin ? '' : 'none';
+    var switchBtnMain = $('#fisher-btn-switch-admin');
+    if (switchBtnMain) switchBtnMain.style.display = isAdmin ? '' : 'none';
     var settingsBtn = $('#fisher-settings');
     if (settingsBtn) {
         var hasSettingsUse = isFisherAlsoAdmin(fisher) || isWebAuthnSupported();
