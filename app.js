@@ -144,23 +144,35 @@ function rerender() {
 }
 
 function dbSet(col, id, data) {
-    if (fbReady) { db.ref(col + '/' + id).set(data); return; }
-    const map = { fishers, checkins, catches, visitors };
-    const arr = map[col];
-    if (!arr) return;
-    const i = arr.findIndex(x => x.id === id);
+    if (fbReady && db) {
+        return db.ref(col + '/' + id).set(data).then(function() { return true; }).catch(function(err) {
+            console.error('dbSet error:', col, err);
+            throw err;
+        });
+    }
+    var map = { fishers: fishers, checkins: checkins, catches: catches, visitors: visitors };
+    var arr = map[col];
+    if (!arr) return Promise.resolve();
+    var i = arr.findIndex(function(x) { return x.id === id; });
     if (i >= 0) arr[i] = data; else arr.push(data);
     lsSave(LS[col.toUpperCase()], arr);
+    return Promise.resolve();
 }
 
 function dbRemove(col, id) {
-    if (fbReady) { db.ref(col + '/' + id).remove(); return; }
-    const map = { fishers, checkins, catches, visitors };
-    const arr = map[col];
-    if (!arr) return;
-    const i = arr.findIndex(x => x.id === id);
+    if (fbReady && db) {
+        return db.ref(col + '/' + id).remove().then(function() { return true; }).catch(function(err) {
+            console.error('dbRemove error:', col, err);
+            throw err;
+        });
+    }
+    var map = { fishers: fishers, checkins: checkins, catches: catches, visitors: visitors };
+    var arr = map[col];
+    if (!arr) return Promise.resolve();
+    var i = arr.findIndex(function(x) { return x.id === id; });
     if (i >= 0) arr.splice(i, 1);
     lsSave(LS[col.toUpperCase()], arr);
+    return Promise.resolve();
 }
 
 // ════════════════════════════════════════
@@ -222,18 +234,30 @@ $('#modal-close-podminky').addEventListener('click', () => closeModal(modals.pod
 if ($('#modal-close-admin-pin')) $('#modal-close-admin-pin').addEventListener('click', () => closeModal(modals.adminPin));
 $('#btn-podminky').addEventListener('click', e => { e.preventDefault(); openModal(modals.podminky); });
 
-// Odeslání PINu správce
-$('#admin-pin-form')?.addEventListener('submit', async e => {
-    e.preventDefault();
-    const pin = $('#admin-pin-input').value.trim();
+// Odeslání PINu správce (spolehlivé na PC i mobilu – event delegation)
+async function doAdminLogin() {
+    var pinEl = document.getElementById('admin-pin-input');
+    var pin = (pinEl && pinEl.value) ? pinEl.value.trim() : '';
     if (!pin) { showToast('Zadejte PIN', 'warning'); return; }
-    const r = await checkAdminPin(pin);
-    if (!r.ok) { showToast(r.msg, 'danger'); return; }
-    setAdminUnlocked(true);
-    closeModal(modals.adminPin);
-    $('#admin-pin-input').value = '';
-    renderFishers();
-    showToast('Přihlášen jako správce', 'success');
+    try {
+        var r = await checkAdminPin(pin);
+        if (!r.ok) { showToast(r.msg, 'danger'); return; }
+        setAdminUnlocked(true);
+        closeModal(modals.adminPin);
+        if (pinEl) pinEl.value = '';
+        renderFishers();
+        showToast('Přihlášen jako správce', 'success');
+    } catch (err) {
+        console.error(err);
+        showToast('Chyba při ověření PINu. Zkuste obnovit stránku.', 'danger');
+    }
+}
+document.addEventListener('click', function(e) {
+    if (e.target && e.target.id === 'admin-pin-submit') { e.preventDefault(); e.stopPropagation(); doAdminLogin(); }
+});
+var adminPinInput = document.getElementById('admin-pin-input');
+if (adminPinInput) adminPinInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); doAdminLogin(); }
 });
 
 // Uložení nového PINu v Nastavení
@@ -259,19 +283,23 @@ function initials(name)   { return name.split(' ').map(w => w[0]).join('').toUpp
 function getAppUrl()      { return (window.location.protocol === 'file:') ? BASE_URL + '/index.html' : window.location.origin + window.location.pathname; }
 
 // ── Režim správce (přidávání / úpravy držitelů jen po zadání PINu)
+// Souběžné přihlášení: localStorage – platí na všech záložkách i po restartu prohlížeče
 function isAdminMode() {
-    try { return sessionStorage.getItem(LS.ADMIN) === '1'; } catch (_) { return false; }
+    try { return localStorage.getItem(LS.ADMIN) === '1'; } catch (_) { return false; }
 }
 function setAdminUnlocked(yes) {
     try {
-        if (yes) sessionStorage.setItem(LS.ADMIN, '1');
-        else sessionStorage.removeItem(LS.ADMIN);
+        if (yes) localStorage.setItem(LS.ADMIN, '1');
+        else localStorage.removeItem(LS.ADMIN);
     } catch (_) {}
 }
 async function hashPin(pin) {
-    const buf = new TextEncoder().encode(pin);
-    const hash = await crypto.subtle.digest('SHA-256', buf);
-    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+    if (!window.crypto || !window.crypto.subtle) {
+        throw new Error('Ověření PINu vyžaduje zabezpečené připojení (HTTPS). Otevřete aplikaci z https://hlubocek.github.io');
+    }
+    var buf = new TextEncoder().encode(pin);
+    var hash = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(hash)).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
 }
 function getStoredPinHash() {
     if (cachedPinHash) return cachedPinHash;
@@ -362,16 +390,20 @@ function showRegOverlay() {
 }
 
 function regCheckScrollEnd() {
-    var el = $('#reg-rad-scroll'), check = $('#reg-rad-confirm'), hint = $('#reg-rad-confirm-text');
+    var el = $('#reg-rad-scroll'), card = $('#reg-card'), check = $('#reg-rad-confirm'), hint = $('#reg-rad-confirm-text');
     if (!el || !check) return;
     var scrollable = el.scrollHeight > el.clientHeight + 15;
     var atBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 25;
-    if (scrollable && atBottom) {
+    var cardScrolledToBottom = false;
+    if (card && card.scrollHeight > card.clientHeight + 20) {
+        cardScrolledToBottom = card.scrollHeight - card.scrollTop <= card.clientHeight + 40;
+    }
+    if ((scrollable && atBottom) || cardScrolledToBottom) {
         if (window._regNoScrollTimer) { clearTimeout(window._regNoScrollTimer); window._regNoScrollTimer = null; }
         check.disabled = false;
         if (hint) hint.textContent = 'Potvrzuji, že jsem se seznámil(a) s rybářským řádem a souhlasím s ním.';
         var ws = $('#reg-warning-strip'); if (ws) ws.style.display = 'none';
-    } else if (!scrollable) {
+    } else if (!scrollable && !cardScrolledToBottom) {
         if (window._regNoScrollTimer) return;
         window._regNoScrollTimer = setTimeout(function() {
             window._regNoScrollTimer = null;
@@ -383,18 +415,38 @@ function regCheckScrollEnd() {
 }
 
 var regScrollEl = $('#reg-rad-scroll');
-if (regScrollEl) {
-    regScrollEl.addEventListener('scroll', function() {
+var regCardEl = $('#reg-card');
+function regScheduleScrollCheck() {
+    if (window._regScrollCheckTimer) clearTimeout(window._regScrollCheckTimer);
+    window._regScrollCheckTimer = setTimeout(function() {
+        window._regScrollCheckTimer = null;
         if (window._regNoScrollTimer) { clearTimeout(window._regNoScrollTimer); window._regNoScrollTimer = null; }
         regCheckScrollEnd();
-    });
-    regScrollEl.addEventListener('touchend', function() { regCheckScrollEnd(); }, { passive: true });
+    }, 100);
+}
+if (regScrollEl) {
+    regScrollEl.addEventListener('scroll', regScheduleScrollCheck);
+    regScrollEl.addEventListener('touchend', regScheduleScrollCheck, { passive: true });
+}
+if (regCardEl) {
+    regCardEl.addEventListener('scroll', regScheduleScrollCheck);
+    regCardEl.addEventListener('touchend', regScheduleScrollCheck, { passive: true });
 }
 var regConfirmEl = $('#reg-rad-confirm');
 if (regConfirmEl) regConfirmEl.addEventListener('change', function() {
     var btn = $('#reg-submit-btn');
     if (btn) btn.disabled = !$('#reg-rad-confirm').checked;
     var ws = $('#reg-warning-strip'); if (ws) ws.style.display = 'none';
+});
+// Tlačítko „Potvrdit přečtení“ – spolehlivé na mobilu, když scroll detekce selže
+var regConfirmBtn = $('#reg-confirm-btn');
+if (regConfirmBtn) regConfirmBtn.addEventListener('click', function() {
+    var check = $('#reg-rad-confirm'), hint = $('#reg-rad-confirm-text'), ws = $('#reg-warning-strip');
+    if (check) { check.disabled = false; check.checked = true; }
+    if (hint) hint.textContent = 'Potvrzuji, že jsem se seznámil(a) s rybářským řádem a souhlasím s ním.';
+    if (ws) ws.style.display = 'none';
+    var submitBtn = $('#reg-submit-btn');
+    if (submitBtn) submitBtn.disabled = false;
 });
 $('#reg-submit-btn').addEventListener('click', function() {
     if (this.disabled) {
@@ -404,9 +456,9 @@ $('#reg-submit-btn').addEventListener('click', function() {
     }
 });
 
-$('#reg-form').addEventListener('submit', e => {
+$('#reg-form').addEventListener('submit', async function(e) {
     e.preventDefault();
-    const name = $('#reg-name').value.trim();
+    var name = $('#reg-name').value.trim();
     if (!name) return;
     if (!$('#reg-rad-confirm').checked) {
         var strip = $('#reg-warning-strip'), card = $('#reg-card');
@@ -415,8 +467,8 @@ $('#reg-form').addEventListener('submit', e => {
         showToast('Potvrďte přečtení rybářského řádu.', 'warning');
         return;
     }
-    const number = $('#reg-number').value.trim();
-    const phone  = $('#reg-phone').value.trim();
+    var number = $('#reg-number').value.trim();
+    var phone  = $('#reg-phone').value.trim();
     var duplicate = fishers.find(function(f) {
         if (f.name && name && f.name.trim().toLowerCase() === name.toLowerCase()) return true;
         if (number && f.number && f.number.trim() === number) return true;
@@ -427,24 +479,32 @@ $('#reg-form').addEventListener('submit', e => {
         showToast('Už jste zaregistrován(a). Pokud máte dotazy, kontaktujte správce.', 'warning');
         return;
     }
-    const id   = genId();
-    const data = {
-        id, name,
+    var id   = genId();
+    var data = {
+        id: id, name: name,
         number: number,
         phone:  phone,
         registeredAt: new Date().toISOString()
     };
-    dbSet('fishers', id, data);
-    if (fbReady) {
-        try { db.ref('activity').push({ type: 'registration', name: name, id: id, at: data.registeredAt }); } catch (_) {}
+    var btn = $('#reg-submit-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Ukládám…'; }
+    try {
+        await dbSet('fishers', id, data);
+        if (fbReady && db) {
+            try { await db.ref('activity').push({ type: 'registration', name: name, id: id, at: data.registeredAt }); } catch (_) {}
+        }
+        var idx = fishers.findIndex(function(f) { return f.id === id; });
+        if (idx >= 0) fishers[idx] = data; else fishers.push(data);
+        lsSave(LS.FISHERS, fishers);
+        renderFishers();
+        populateFisherSelects();
+        $('#reg-overlay').style.display = 'none';
+        showToast('✅ ' + name + ' zaregistrován(a)!', 'success');
+    } catch (err) {
+        console.error('Registrace selhala:', err);
+        showToast('Nepodařilo se uložit. Zkontrolujte připojení k internetu a zkuste znovu.', 'danger');
     }
-    var idx = fishers.findIndex(function(f) { return f.id === id; });
-    if (idx >= 0) fishers[idx] = data; else fishers.push(data);
-    lsSave(LS.FISHERS, fishers);
-    renderFishers();
-    populateFisherSelects();
-    $('#reg-overlay').style.display = 'none';
-    showToast('✅ ' + name + ' zaregistrován(a)!', 'success');
+    if (btn) { btn.disabled = false; btn.textContent = 'Zaregistrovat se'; }
 });
 
 // ════════════════════════════════════════
@@ -467,26 +527,30 @@ $('#btn-reg-qr').addEventListener('click', () => {
     setTimeout(() => makeQr(wrap, url, 260), 50);
 });
 
-$('#fisher-form').addEventListener('submit', e => {
+$('#fisher-form').addEventListener('submit', async function(e) {
     e.preventDefault();
-    const id   = editingFisherId || genId();
-    const name = $('#fisher-name').value.trim();
+    var id   = editingFisherId || genId();
+    var name = $('#fisher-name').value.trim();
     if (!name) return;
-    const data = {
-        id, name,
+    var data = {
+        id: id, name: name,
         number:      $('#fisher-number').value.trim(),
         phone:       $('#fisher-phone').value.trim(),
-        registeredAt: editingFisherId ? (fishers.find(f=>f.id===id)?.registeredAt || new Date().toISOString()) : new Date().toISOString()
+        registeredAt: editingFisherId ? (fishers.find(function(f){ return f.id===id; }) && fishers.find(function(f){ return f.id===id; }).registeredAt || new Date().toISOString()) : new Date().toISOString()
     };
-    dbSet('fishers', id, data);
-    if (!fbReady) {
-        const idx = fishers.findIndex(f => f.id === id);
+    try {
+        await dbSet('fishers', id, data);
+        var idx = fishers.findIndex(function(f) { return f.id === id; });
         if (idx >= 0) fishers[idx] = data; else fishers.push(data);
+        lsSave(LS.FISHERS, fishers);
         renderFishers();
         populateFisherSelects();
+        closeModal(modals.fisher);
+        showToast(editingFisherId ? 'Držitel povolenky upraven' : (name + ' přidán'));
+    } catch (err) {
+        console.error('Uložení držitele selhalo:', err);
+        showToast('Nepodařilo se uložit. Zkontrolujte připojení.', 'danger');
     }
-    closeModal(modals.fisher);
-    showToast(editingFisherId ? 'Držitel povolenky upraven' : `${name} přidán`);
     editingFisherId = null;
 });
 
@@ -565,42 +629,57 @@ window._editFisher = function(id) {
     openModal(modals.fisher);
 };
 
-window._deleteFisher = function(id) {
-    const f = fishers.find(x => x.id === id);
-    if (!f || !confirm(`Smazat držitele povolenky ${f.name} včetně všech záznamů?`)) return;
-    dbRemove('fishers', id);
-    checkins.filter(c => c.fisherId === id).forEach(c => dbRemove('checkins',  c.id));
-    catches.filter(c  => c.fisherId === id).forEach(c => dbRemove('catches',   c.id));
-    visitors.filter(v => v.fisherId === id).forEach(v => dbRemove('visitors',  v.id));
-    fishers  = fishers.filter(x => x.id !== id);
-    checkins = checkins.filter(c => c.fisherId !== id);
-    catches  = catches.filter(c => c.fisherId !== id);
-    visitors = visitors.filter(v => v.fisherId !== id);
-    lsSave(LS.FISHERS, fishers); lsSave(LS.CHECKINS, checkins); lsSave(LS.CATCHES, catches); lsSave(LS.VISITORS, visitors);
-    renderFishers();
-    populateFisherSelects();
-    if (currentView === 'dochazka') renderDochazka();
-    if (currentView === 'ulovky') renderUlovky();
-    if (currentView === 'navstevy') renderNavstevy();
-    if (currentView === 'statistiky') renderStatistiky();
-    showToast('Držitel povolenky smazán');
+window._deleteFisher = async function(id) {
+    var f = fishers.find(function(x) { return x.id === id; });
+    if (!f || !confirm('Smazat držitele povolenky ' + f.name + ' včetně všech záznamů?')) return;
+    try {
+        await dbRemove('fishers', id);
+        var checkToDel = checkins.filter(function(c) { return c.fisherId === id; });
+        var catchToDel = catches.filter(function(c) { return c.fisherId === id; });
+        var visitToDel = visitors.filter(function(v) { return v.fisherId === id; });
+        await Promise.all([
+            Promise.all(checkToDel.map(function(c) { return dbRemove('checkins', c.id); })),
+            Promise.all(catchToDel.map(function(c) { return dbRemove('catches', c.id); })),
+            Promise.all(visitToDel.map(function(v) { return dbRemove('visitors', v.id); }))
+        ]);
+        fishers  = fishers.filter(function(x) { return x.id !== id; });
+        checkins = checkins.filter(function(c) { return c.fisherId !== id; });
+        catches  = catches.filter(function(c) { return c.fisherId !== id; });
+        visitors = visitors.filter(function(v) { return v.fisherId !== id; });
+        lsSave(LS.FISHERS, fishers); lsSave(LS.CHECKINS, checkins); lsSave(LS.CATCHES, catches); lsSave(LS.VISITORS, visitors);
+        renderFishers();
+        populateFisherSelects();
+        if (currentView === 'navstevy') renderNavstevy();
+        if (currentView === 'statistiky') renderStatistiky();
+        showToast('Držitel povolenky smazán');
+    } catch (err) {
+        console.error(err);
+        showToast('Nepodařilo se smazat držitele povolenky', 'danger');
+    }
 };
 
 // ════════════════════════════════════════
 // DOCHÁZKA
 // ════════════════════════════════════════
-$('#btn-ci-submit').addEventListener('click', () => {
-    const fid  = $('#ci-fisher').value;
-    const date = $('#ci-date').value;
+$('#btn-ci-submit').addEventListener('click', async function() {
+    var fid  = $('#ci-fisher').value;
+    var date = $('#ci-date').value;
     if (!fid)  { showToast('Nejdříve přidejte držitele povolenky', 'warning'); return; }
     if (!date) { showToast('Vyberte datum', 'warning'); return; }
-    const already = checkins.find(c => c.fisherId === fid && c.date === date);
+    var already = checkins.find(function(c) { return c.fisherId === fid && c.date === date; });
     if (already) { showToast('Tento držitel povolenky je na tento den již evidován', 'warning'); return; }
-    const id = genId();
-    const ci = { id, fisherId: fid, date, timestamp: new Date().toISOString() };
-    dbSet('checkins', id, ci);
-    if (!fbReady) { checkins.push(ci); renderDochazka(); }
-    showToast('✓ Příchod zapsán', 'success');
+    var id = genId();
+    var ci = { id: id, fisherId: fid, date: date, timestamp: new Date().toISOString() };
+    try {
+        await dbSet('checkins', id, ci);
+        checkins.push(ci);
+        lsSave(LS.CHECKINS, checkins);
+        renderDochazka();
+        showToast('✓ Příchod zapsán', 'success');
+    } catch (err) {
+        console.error(err);
+        showToast('Nepodařilo se zapsat příchod', 'danger');
+    }
 });
 
 function renderDochazka() {
@@ -629,13 +708,18 @@ function renderDochazka() {
         </div>`).join('');
 }
 
-window._deleteCheckin = function(id) {
+window._deleteCheckin = async function(id) {
     if (!confirm('Smazat záznam příchodu?')) return;
-    dbRemove('checkins', id);
-    checkins = checkins.filter(c => c.id !== id);
-    lsSave(LS.CHECKINS, checkins);
-    renderDochazka();
-    showToast('Záznam smazán');
+    try {
+        await dbRemove('checkins', id);
+        checkins = checkins.filter(function(c) { return c.id !== id; });
+        lsSave(LS.CHECKINS, checkins);
+        renderDochazka();
+        showToast('Záznam smazán');
+    } catch (err) {
+        console.error(err);
+        showToast('Nepodařilo se smazat', 'danger');
+    }
 };
 
 // ════════════════════════════════════════
@@ -654,27 +738,34 @@ $('#catch-length').addEventListener('input', () => {
     }
 });
 
-$('#btn-catch-submit').addEventListener('click', () => {
-    const fid    = $('#catch-fisher').value;
-    const date   = $('#catch-date').value;
-    const length = parseInt($('#catch-length').value);
-    const kept   = $('#catch-kept').checked;
+$('#btn-catch-submit').addEventListener('click', async function() {
+    var fid    = $('#catch-fisher').value;
+    var date   = $('#catch-date').value;
+    var length = parseInt($('#catch-length').value, 10);
+    var kept   = $('#catch-kept').checked;
     if (!fid)                              { showToast('Nejdříve přidejte držitele povolenky', 'warning'); return; }
     if (!date)                             { showToast('Vyberte datum', 'warning'); return; }
     if (!length || length < 5 || length > 150) { showToast('Zadejte délku v cm (5–150)', 'warning'); return; }
-    const id  = genId();
-    const cat = {
-        id, fisherId: fid, species: SPECIES, length, kept,
+    var id  = genId();
+    var cat = {
+        id: id, fisherId: fid, species: SPECIES, length: length, kept: kept,
         inRange: length >= MIN_LEN && length <= MAX_LEN,
-        date, timestamp: new Date().toISOString()
+        date: date, timestamp: new Date().toISOString()
     };
-    dbSet('catches', id, cat);
-    if (!fbReady) { catches.push(cat); renderUlovky(); }
-    $('#catch-length').value   = '';
-    $('#catch-length-hint').textContent = '';
-    $('#catch-length-hint').className   = 'form-hint';
-    $('#catch-kept').checked   = false;
-    showToast(`🐟 Úlovek ${length} cm zapsán${kept ? ' · vzal rybu' : ''}`, 'success');
+    try {
+        await dbSet('catches', id, cat);
+        catches.push(cat);
+        lsSave(LS.CATCHES, catches);
+        renderUlovky();
+        $('#catch-length').value   = '';
+        $('#catch-length-hint').textContent = '';
+        $('#catch-length-hint').className   = 'form-hint';
+        $('#catch-kept').checked   = false;
+        showToast('🐟 Úlovek ' + length + ' cm zapsán' + (kept ? ' · vzal rybu' : ''), 'success');
+    } catch (err) {
+        console.error(err);
+        showToast('Nepodařilo se zapsat úlovek', 'danger');
+    }
 });
 
 function renderUlovky() {
@@ -713,32 +804,44 @@ function renderUlovky() {
 
 window._refreshUlovky = function() { renderUlovky(); };
 
-window._deleteCatch = function(id) {
+window._deleteCatch = async function(id) {
     if (!confirm('Smazat úlovek?')) return;
-    dbRemove('catches', id);
-    catches = catches.filter(c => c.id !== id);
-    lsSave(LS.CATCHES, catches);
-    renderUlovky();
-    if (currentView === 'statistiky') renderStatistiky();
-    showToast('Úlovek smazán');
+    try {
+        await dbRemove('catches', id);
+        catches = catches.filter(function(c) { return c.id !== id; });
+        lsSave(LS.CATCHES, catches);
+        renderUlovky();
+        if (currentView === 'statistiky') renderStatistiky();
+        showToast('Úlovek smazán');
+    } catch (err) {
+        console.error(err);
+        showToast('Nepodařilo se smazat úlovek', 'danger');
+    }
 };
 
 // ════════════════════════════════════════
 // NÁVŠTĚVY
 // ════════════════════════════════════════
-$('#btn-visit-submit').addEventListener('click', () => {
-    const fid         = $('#visit-fisher').value;
-    const date        = $('#visit-date').value;
-    const visitorName = $('#visit-name').value.trim();
+$('#btn-visit-submit').addEventListener('click', async function() {
+    var fid         = $('#visit-fisher').value;
+    var date        = $('#visit-date').value;
+    var visitorName = $('#visit-name').value.trim();
     if (!fid)         { showToast('Nejdříve přidejte držitele povolenky', 'warning'); return; }
     if (!visitorName) { showToast('Zadejte jméno návštěvy', 'warning'); return; }
     if (!date)        { showToast('Vyberte datum', 'warning'); return; }
-    const id  = genId();
-    const v   = { id, fisherId: fid, visitorName, date, fee: FEE_VISIT, timestamp: new Date().toISOString() };
-    dbSet('visitors', id, v);
-    if (!fbReady) { visitors.push(v); renderNavstevy(); }
-    $('#visit-name').value = '';
-    showToast(`👥 Návštěva zapsána · ${FEE_VISIT} Kč`, 'success');
+    var id  = genId();
+    var v   = { id: id, fisherId: fid, visitorName: visitorName, date: date, fee: FEE_VISIT, timestamp: new Date().toISOString() };
+    try {
+        await dbSet('visitors', id, v);
+        visitors.push(v);
+        lsSave(LS.VISITORS, visitors);
+        renderNavstevy();
+        $('#visit-name').value = '';
+        showToast('👥 Návštěva zapsána · ' + FEE_VISIT + ' Kč', 'success');
+    } catch (err) {
+        console.error(err);
+        showToast('Nepodařilo se zapsat návštěvu', 'danger');
+    }
 });
 
 function renderNavstevy() {
@@ -781,14 +884,19 @@ function renderNavstevy() {
 
 window._refreshNavstevy = function() { renderNavstevy(); };
 
-window._deleteVisitor = function(id) {
+window._deleteVisitor = async function(id) {
     if (!confirm('Smazat záznam návštěvy?')) return;
-    dbRemove('visitors', id);
-    visitors = visitors.filter(v => v.id !== id);
-    lsSave(LS.VISITORS, visitors);
-    renderNavstevy();
-    if (currentView === 'statistiky') renderStatistiky();
-    showToast('Záznam smazán');
+    try {
+        await dbRemove('visitors', id);
+        visitors = visitors.filter(function(v) { return v.id !== id; });
+        lsSave(LS.VISITORS, visitors);
+        renderNavstevy();
+        if (currentView === 'statistiky') renderStatistiky();
+        showToast('Záznam smazán');
+    } catch (err) {
+        console.error(err);
+        showToast('Nepodařilo se smazat návštěvu', 'danger');
+    }
 };
 
 // ════════════════════════════════════════

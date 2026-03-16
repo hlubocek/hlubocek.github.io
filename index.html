@@ -198,6 +198,7 @@
                         <input type="checkbox" id="reg-rad-confirm" required disabled>
                         <span id="reg-rad-confirm-text">Potvrzuji, že jsem se seznámil(a) s rybářským řádem a souhlasím s ním.</span>
                     </label>
+                    <button type="button" id="reg-confirm-btn" class="btn btn-secondary btn-sm" style="margin-top:.5rem;">✓ Potvrdit přečtení řádu</button>
                 </div>
                 <div class="form-group">
                     <label for="reg-name">Jméno a příjmení</label>
@@ -286,12 +287,12 @@
                 <h3>🔐 PIN správce</h3>
                 <button class="modal-close" id="modal-close-admin-pin">&times;</button>
             </div>
-            <form id="admin-pin-form">
+            <form id="admin-pin-form" novalidate>
                 <div class="form-group">
                     <label for="admin-pin-input">Zadejte PIN</label>
-                    <input type="password" id="admin-pin-input" inputmode="numeric" pattern="[0-9]*" minlength="4" maxlength="8" placeholder="4–8 číslic" autocomplete="off">
+                    <input type="password" id="admin-pin-input" inputmode="numeric" minlength="4" maxlength="8" placeholder="4–8 číslic" autocomplete="off">
                 </div>
-                <button type="submit" class="btn btn-primary btn-full">Přihlásit jako správce</button>
+                <button type="button" id="admin-pin-submit" class="btn btn-primary btn-full">Přihlásit jako správce</button>
             </form>
         </div>
     </div>
