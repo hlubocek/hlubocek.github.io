@@ -179,8 +179,9 @@
             <p class="checkin-location">📍 Registrace nového držitele povolenky</p>
             <form id="reg-form" novalidate style="text-align:left;margin-top:1rem;">
                 <p class="reg-rad-intro">
-                    <button type="button" class="reg-rad-pdf-link" id="reg-open-pdf-btn">📄 Rybářský řád (PDF)</button>
+                    <a href="Rybarsky-rad-Hlubocek.pdf" target="_blank" rel="noopener" class="reg-rad-pdf-link" id="reg-open-pdf-link">📄 Rybářský řád (PDF)</a>
                 </p>
+                <p class="reg-rad-hint">Po přečtení zavřete záložku a vraťte se k formuláři.</p>
                 <div class="form-group">
                     <label for="reg-name">Jméno a příjmení</label>
                     <input type="text" id="reg-name" placeholder="Jan Novák" required>
@@ -201,17 +202,6 @@
                 </div>
                 <button type="button" class="btn btn-primary btn-full" id="reg-submit-btn" style="margin-top:.75rem;">Zaregistrovat se</button>
             </form>
-        </div>
-    </div>
-
-    <!-- PDF náhled – Rybářský řád (uvnitř registrace) -->
-    <div id="reg-pdf-overlay" class="reg-pdf-overlay" style="display:none;">
-        <div class="reg-pdf-toolbar">
-            <button type="button" class="btn btn-primary btn-full reg-pdf-back-btn" id="reg-pdf-close-btn">← Zpět k formuláři</button>
-        </div>
-        <iframe id="reg-pdf-iframe" src="" title="Rybářský řád"></iframe>
-        <div class="reg-pdf-bottom-bar">
-            <button type="button" class="btn btn-primary btn-full reg-pdf-back-btn" id="reg-pdf-close-btn-bottom">← Zpět k formuláři</button>
         </div>
     </div>
 

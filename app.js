@@ -378,29 +378,7 @@ function handleUrlAction() {
 function showRegOverlay() {
     $('#reg-form').reset();
     $('#reg-overlay').style.display = 'flex';
-    var pdfOverlay = document.getElementById('reg-pdf-overlay');
-    if (pdfOverlay) pdfOverlay.style.display = 'none';
 }
-var regOpenPdfBtn = document.getElementById('reg-open-pdf-btn');
-if (regOpenPdfBtn) regOpenPdfBtn.addEventListener('click', function() {
-    var overlay = document.getElementById('reg-pdf-overlay');
-    var iframe = document.getElementById('reg-pdf-iframe');
-    if (overlay && iframe) {
-        var pdfUrl = new URL('Rybarsky-rad-Hlubocek.pdf', window.location.href).href;
-        iframe.src = 'https://docs.google.com/viewer?url=' + encodeURIComponent(pdfUrl) + '&embedded=true';
-        overlay.style.display = 'flex';
-    }
-});
-function closeRegPdfOverlay() {
-    var overlay = document.getElementById('reg-pdf-overlay');
-    var iframe = document.getElementById('reg-pdf-iframe');
-    if (overlay) overlay.style.display = 'none';
-    if (iframe) iframe.src = '';
-}
-var regPdfCloseBtn = document.getElementById('reg-pdf-close-btn');
-if (regPdfCloseBtn) regPdfCloseBtn.addEventListener('click', closeRegPdfOverlay);
-var regPdfCloseBtnBottom = document.getElementById('reg-pdf-close-btn-bottom');
-if (regPdfCloseBtnBottom) regPdfCloseBtnBottom.addEventListener('click', closeRegPdfOverlay);
 
 async function doRegSubmit() {
     var name = $('#reg-name') && $('#reg-name').value ? $('#reg-name').value.trim() : '';
