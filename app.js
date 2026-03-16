@@ -380,16 +380,13 @@ function showRegOverlay() {
     $('#reg-overlay').style.display = 'flex';
 }
 
-$('#reg-form').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    var name = $('#reg-name').value.trim();
-    if (!name) return;
-    if (!$('#reg-rad-confirm').checked) {
-        showToast('Zaškrtněte souhlas s rybářským řádem.', 'warning');
-        return;
-    }
-    var number = $('#reg-number').value.trim();
-    var phone  = $('#reg-phone').value.trim();
+async function doRegSubmit() {
+    var name = $('#reg-name') && $('#reg-name').value ? $('#reg-name').value.trim() : '';
+    if (!name) { showToast('Zadejte jméno', 'warning'); return; }
+    var check = $('#reg-rad-confirm');
+    if (!check || !check.checked) { showToast('Zaškrtněte souhlas s rybářským řádem.', 'warning'); return; }
+    var number = $('#reg-number') && $('#reg-number').value ? $('#reg-number').value.trim() : '';
+    var phone  = $('#reg-phone') && $('#reg-phone').value ? $('#reg-phone').value.trim() : '';
     var duplicate = fishers.find(function(f) {
         if (f.name && name && f.name.trim().toLowerCase() === name.toLowerCase()) return true;
         if (number && f.number && f.number.trim() === number) return true;
@@ -401,12 +398,7 @@ $('#reg-form').addEventListener('submit', async function(e) {
         return;
     }
     var id   = genId();
-    var data = {
-        id: id, name: name,
-        number: number,
-        phone:  phone,
-        registeredAt: new Date().toISOString()
-    };
+    var data = { id: id, name: name, number: number, phone: phone, registeredAt: new Date().toISOString() };
     var btn = $('#reg-submit-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Ukládám…'; }
     try {
@@ -426,7 +418,11 @@ $('#reg-form').addEventListener('submit', async function(e) {
         showToast('Nepodařilo se uložit. Zkontrolujte připojení k internetu a zkuste znovu.', 'danger');
     }
     if (btn) { btn.disabled = false; btn.textContent = 'Zaregistrovat se'; }
-});
+}
+
+var regBtn = document.getElementById('reg-submit-btn');
+if (regBtn) regBtn.addEventListener('click', function() { doRegSubmit(); });
+$('#reg-form').addEventListener('submit', function(e) { e.preventDefault(); doRegSubmit(); });
 
 // ════════════════════════════════════════
 // RYBÁŘI
