@@ -27,7 +27,9 @@ const LS = {
     FB_URL:    'hlb_fb_url',
     FB_KEY:   'hlb_fb_key',
     ADMIN:     'hlb_admin',
-    ADMIN_PIN: 'hlb_admin_pin'
+    ADMIN_PIN: 'hlb_admin_pin',
+    FISHER_ID: 'hlb_fisher_id',
+    WEBAUTHN:  'hlb_webauthn'
 };
 
 // ════════════════════════════════════════
@@ -40,7 +42,9 @@ let checkins  = [];
 let catches   = [];
 let visitors  = [];
 let activity  = [];
-let cachedPinHash = '';
+let cachedAdminPinHashes = [];
+let cachedAdminNames = {};
+let cachedWebauthnCredentials = {};  // { credentialIdBase64: fisherId }
 
 function lsLoad(k)    { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } }
 function lsSave(k, d) { localStorage.setItem(k, JSON.stringify(d)); }
@@ -60,17 +64,35 @@ function initFirebase(dbUrl, apiKey) {
 }
 
 function setupListeners() {
-    db.ref('config/pinHash').on('value', function(s) {
+    db.ref('config/adminPinHashes').on('value', function(s) {
         var v = s.val();
-        cachedPinHash = (v && typeof v === 'string') ? v : '';
-        if (cachedPinHash) try { localStorage.setItem(LS.ADMIN_PIN, cachedPinHash); } catch(_) {}
+        if (Array.isArray(v)) cachedAdminPinHashes = v;
+        else if (v && typeof v === 'object') cachedAdminPinHashes = Object.values(v);
+        else cachedAdminPinHashes = [];
     });
-    db.ref('config/pinHash').once('value').then(function(s) {
-        if (s.val()) return;
-        try {
-            var local = localStorage.getItem(LS.ADMIN_PIN);
-            if (local && local.length === 64) db.ref('config/pinHash').set(local);
-        } catch(_) {}
+    db.ref('config/adminNames').on('value', function(s) {
+        var v = s.val();
+        cachedAdminNames = (v && typeof v === 'object') ? v : {};
+    });
+    db.ref('config/webauthnCredentials').on('value', function(s) {
+        var v = s.val();
+        cachedWebauthnCredentials = (v && typeof v === 'object') ? v : {};
+        updateBiometricLoginVisibility();
+    });
+    db.ref('config/adminPinHashes').once('value').then(function(s) {
+        var v = s.val();
+        if (v && (Array.isArray(v) ? v.length : Object.keys(v).length)) return;
+        return db.ref('config/pinHash').once('value').then(function(old) {
+            var legacy = old.val();
+            if (legacy && typeof legacy === 'string') {
+                cachedAdminPinHashes = [legacy];
+                return db.ref('config/adminPinHashes').set([legacy]);
+            }
+            try {
+                var local = localStorage.getItem(LS.ADMIN_PIN);
+                if (local && local.length === 64) return db.ref('config/adminPinHashes').set([local]);
+            } catch(_) {}
+        });
     }).catch(function() {});
     db.ref('fishers').on('value',  s => { fishers  = s.val() ? Object.values(s.val()) : []; lsSave(LS.FISHERS,  fishers);  updateSyncBar(); rerender(); });
     db.ref('checkins').on('value', s => { checkins = s.val() ? Object.values(s.val()) : []; lsSave(LS.CHECKINS, checkins); rerender(); });
@@ -96,6 +118,11 @@ function setupListeners() {
         lsSave(LS.FISHERS, fishers); lsSave(LS.CHECKINS, checkins); lsSave(LS.CATCHES, catches); lsSave(LS.VISITORS, visitors);
         updateSyncBar();
         rerender();
+    }).catch(function() {});
+    db.ref('config/webauthnCredentials').once('value').then(function(s) {
+        var v = s.val();
+        cachedWebauthnCredentials = (v && typeof v === 'object') ? v : {};
+        updateBiometricLoginVisibility();
     }).catch(function() {});
 }
 
@@ -141,6 +168,8 @@ function rerender() {
     if (currentView === 'ulovky')     renderUlovky();
     if (currentView === 'navstevy')   renderNavstevy();
     if (currentView === 'statistiky') renderStatistiky();
+    var fisher = getLoggedInFisher();
+    if (fisher && $('#fisher-profile').offsetParent !== null) renderFisherProfile(fisher);
 }
 
 function dbSet(col, id, data) {
@@ -226,7 +255,7 @@ const modals = {
 };
 function openModal(m)  { if (m) m.classList.add('open');    document.body.style.overflow = 'hidden'; }
 function closeModal(m) { if (m) m.classList.remove('open'); document.body.style.overflow = ''; }
-Object.values(modals).forEach(m => m && m.addEventListener('click', e => { if (e.target === m) closeModal(m); }));
+// Zavírání jen tlačítkem ✕ nebo po odeslání – ne při kliknutí na pozadí (zabraňuje náhodnému zavření při přejetí myší)
 $('#modal-close-fisher').addEventListener('click',   () => closeModal(modals.fisher));
 $('#modal-close-qr').addEventListener('click',       () => closeModal(modals.qr));
 $('#modal-close-settings').addEventListener('click', () => closeModal(modals.settings));
@@ -260,17 +289,22 @@ if (adminPinInput) adminPinInput.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') { e.preventDefault(); doAdminLogin(); }
 });
 
-// Uložení nového PINu v Nastavení
+// Uložení nového PINu správce v Nastavení
 $('#btn-save-pin')?.addEventListener('click', async () => {
+    const name = $('#settings-admin-name').value.trim();
     const newPin = $('#settings-pin-new').value.trim();
     const conf  = $('#settings-pin-confirm').value.trim();
     if (newPin.length < 4 || newPin.length > 8) { showToast('PIN musí mít 4–8 číslic', 'warning'); return; }
     if (newPin !== conf) { showToast('PINy se neshodují', 'danger'); return; }
     const hash = await hashPin(newPin);
-    setPinHash(hash);
+    var hashes = getAdminPinHashes();
+    if (hashes.indexOf(hash) >= 0) { showToast('Tento PIN už je přidaný', 'warning'); return; }
+    addAdminPinHash(hash, name || null);
+    $('#settings-admin-name').value = '';
     $('#settings-pin-new').value = '';
     $('#settings-pin-confirm').value = '';
-    showToast(fbReady ? 'PIN správce uložen do databáze (platí všude)' : 'PIN správce uložen', 'success');
+    showToast(fbReady ? 'Správce přidán (platí všude)' : 'Správce přidán', 'success');
+    renderAdminPinsList();
 });
 
 // ── Helpers ──
@@ -301,28 +335,247 @@ async function hashPin(pin) {
     var hash = await crypto.subtle.digest('SHA-256', buf);
     return Array.from(new Uint8Array(hash)).map(function(b) { return b.toString(16).padStart(2, '0'); }).join('');
 }
-function getStoredPinHash() {
-    if (cachedPinHash) return cachedPinHash;
-    try { return localStorage.getItem(LS.ADMIN_PIN) || ''; } catch (_) { return ''; }
+function getAdminPinHashes() {
+    if (cachedAdminPinHashes.length) return cachedAdminPinHashes;
+    try {
+        var raw = localStorage.getItem('hlb_admin_pin_hashes');
+        if (raw) { var arr = JSON.parse(raw); return Array.isArray(arr) ? arr : []; }
+        var single = localStorage.getItem(LS.ADMIN_PIN);
+        if (single && single.length === 64) return [single];
+    } catch (_) {}
+    return [];
 }
-function setPinHash(hash) {
-    cachedPinHash = hash;
-    try { localStorage.setItem(LS.ADMIN_PIN, hash); } catch (_) {}
-    if (fbReady && db) db.ref('config/pinHash').set(hash);
+function setAdminPinHashes(hashes) {
+    cachedAdminPinHashes = hashes;
+    try { localStorage.setItem('hlb_admin_pin_hashes', JSON.stringify(hashes)); } catch (_) {}
+    if (fbReady && db) db.ref('config/adminPinHashes').set(hashes);
+}
+function getAdminNames() {
+    if (Object.keys(cachedAdminNames).length) return cachedAdminNames;
+    try {
+        var raw = localStorage.getItem('hlb_admin_names');
+        if (raw) return JSON.parse(raw);
+    } catch (_) {}
+    return {};
+}
+function setAdminNames(names) {
+    cachedAdminNames = names;
+    try { localStorage.setItem('hlb_admin_names', JSON.stringify(names)); } catch (_) {}
+    if (fbReady && db) db.ref('config/adminNames').set(names);
+}
+function getAdminDisplayName(hash) {
+    var names = getAdminNames();
+    if (names[hash]) return names[hash];
+    var f = fishers.find(function(x) { return x.pinHash === hash; });
+    return f ? f.name : null;
+}
+function addAdminPinHash(hash, name) {
+    var hashes = getAdminPinHashes();
+    if (hashes.indexOf(hash) >= 0) return;
+    hashes.push(hash);
+    setAdminPinHashes(hashes);
+    if (name && name.trim()) {
+        var names = getAdminNames();
+        names[hash] = name.trim();
+        setAdminNames(names);
+    }
+}
+function removeAdminPinHash(hash) {
+    var hashes = getAdminPinHashes();
+    if (hashes.length <= 1) return false;
+    var i = hashes.indexOf(hash);
+    if (i < 0) return false;
+    hashes.splice(i, 1);
+    setAdminPinHashes(hashes);
+    var names = getAdminNames();
+    delete names[hash];
+    setAdminNames(names);
+    return true;
 }
 async function checkAdminPin(pin) {
-    var stored = getStoredPinHash();
-    if (!stored && fbReady && db) {
+    var hashes = getAdminPinHashes();
+    if (!hashes.length && fbReady && db) {
         try {
-            var snap = await db.ref('config/pinHash').once('value');
+            var snap = await db.ref('config/adminPinHashes').once('value');
             var v = snap.val();
-            if (v && typeof v === 'string') { cachedPinHash = v; stored = v; }
+            if (v) {
+                if (Array.isArray(v)) cachedAdminPinHashes = v;
+                else if (typeof v === 'object') cachedAdminPinHashes = Object.values(v);
+                hashes = cachedAdminPinHashes;
+            }
+            if (!hashes.length) {
+                var old = await db.ref('config/pinHash').once('value');
+                if (old.val()) { hashes = [old.val()]; setAdminPinHashes(hashes); }
+            }
         } catch (_) {}
     }
-    if (!stored) return { ok: false, msg: 'Nejdříve nastavte PIN správce v Nastavení (⚙️).' };
+    if (!hashes.length) return { ok: false, msg: 'Nejdříve nastavte PIN správce v Nastavení (⚙️).' };
     const h = await hashPin(pin);
-    if (h !== stored) return { ok: false, msg: 'Nesprávný PIN.' };
+    if (hashes.indexOf(h) < 0) return { ok: false, msg: 'Nesprávný PIN.' };
     return { ok: true };
+}
+async function isPinUsedByOther(pin, excludeFisherId) {
+    var h = await hashPin(pin);
+    return fishers.some(function(f) {
+        if (excludeFisherId && f.id === excludeFisherId) return false;
+        return f.pinHash === h;
+    });
+}
+async function generateUniqueFisherPin() {
+    var used = new Set();
+    fishers.forEach(function(f) { if (f.pinDisplay) used.add(f.pinDisplay); });
+    for (var i = 0; i < 50; i++) {
+        var pin = String(Math.floor(100000 + Math.random() * 900000));
+        if (used.has(pin)) continue;
+        var h = await hashPin(pin);
+        var clash = fishers.some(function(f) { return f.pinHash === h; });
+        if (!clash) return pin;
+    }
+    return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+// ════════════════════════════════════════
+// WEBAUTHN / BIOMETRIKA
+// ════════════════════════════════════════
+function isWebAuthnSupported() {
+    return !!(window.PublicKeyCredential && window.crypto && window.crypto.subtle);
+}
+function getRpId() {
+    if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+        var h = window.location.hostname;
+        if (h === 'localhost' || h === '127.0.0.1') return h;
+        if (h === 'hlubocek.github.io') return 'hlubocek.github.io';
+        return h;
+    }
+    return 'hlubocek.github.io';
+}
+function base64urlEncode(buf) {
+    var bin = String.fromCharCode.apply(null, new Uint8Array(buf));
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function base64urlDecode(str) {
+    str = (str + '==='.slice((str.length + 3) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+    return Uint8Array.from(atob(str), function(c) { return c.charCodeAt(0); });
+}
+function getWebauthnCredentials() {
+    if (Object.keys(cachedWebauthnCredentials).length) return cachedWebauthnCredentials;
+    try {
+        var raw = localStorage.getItem(LS.WEBAUTHN);
+        if (raw) { var o = JSON.parse(raw); return (o && typeof o === 'object') ? o : {}; }
+    } catch (_) {}
+    return {};
+}
+function setWebauthnCredentials(obj) {
+    cachedWebauthnCredentials = obj;
+    try { localStorage.setItem(LS.WEBAUTHN, JSON.stringify(obj)); } catch (_) {}
+    if (fbReady && db) db.ref('config/webauthnCredentials').set(obj);
+}
+function addWebauthnCredential(credentialId, fisherId) {
+    var creds = getWebauthnCredentials();
+    creds[credentialId] = fisherId;
+    setWebauthnCredentials(creds);
+}
+function removeWebauthnCredentialForFisher(fisherId) {
+    var creds = getWebauthnCredentials();
+    var changed = false;
+    Object.keys(creds).forEach(function(cid) {
+        if (creds[cid] === fisherId) { delete creds[cid]; changed = true; }
+    });
+    if (changed) setWebauthnCredentials(creds);
+}
+function updateBiometricLoginVisibility() {
+    var btn = $('#login-biometric');
+    if (!btn) return;
+    var creds = getWebauthnCredentials();
+    var hasCreds = Object.keys(creds).length > 0;
+    btn.style.display = (isWebAuthnSupported() && hasCreds) ? '' : 'none';
+}
+function updateFisherBiometricButtons(fisher) {
+    var creds = getWebauthnCredentials();
+    var hasCred = Object.keys(creds).some(function(cid) { return creds[cid] === fisher.id; });
+    var addBtn = $('#fisher-btn-add-biometric');
+    var remBtn = $('#fisher-btn-remove-biometric');
+    if (addBtn) addBtn.style.display = (isWebAuthnSupported() && !hasCred) ? '' : 'none';
+    if (remBtn) remBtn.style.display = (isWebAuthnSupported() && hasCred) ? '' : 'none';
+}
+async function webauthnRegister(fisherId, fisherName) {
+    if (!isWebAuthnSupported()) {
+        showToast('Otisk / Face ID není podporováno v tomto prohlížeči. Použijte HTTPS.', 'warning');
+        return;
+    }
+    var challenge = new Uint8Array(32);
+    crypto.getRandomValues(challenge);
+    var userId = new TextEncoder().encode(fisherId);
+    var options = {
+        challenge: challenge,
+        rp: { name: 'Hluboček', id: getRpId() },
+        user: {
+            id: userId,
+            name: fisherId,
+            displayName: fisherName
+        },
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+        authenticatorSelection: {
+            authenticatorAttachment: 'platform',
+            userVerification: 'preferred',
+            requireResidentKey: false
+        },
+        timeout: 60000
+    };
+    try {
+        var cred = await navigator.credentials.create({ publicKey: options });
+        if (!cred || !cred.id) throw new Error('Registrace nebyla dokončena');
+        addWebauthnCredential(cred.id, fisherId);
+        updateBiometricLoginVisibility();
+        updateFisherBiometricButtons(fishers.find(function(f) { return f.id === fisherId; }));
+        showToast('Otisk / Face ID přidán', 'success');
+    } catch (err) {
+        console.error('WebAuthn register:', err);
+        if (err.name === 'NotAllowedError') showToast('Registrace zrušena nebo čas vypršel', 'warning');
+        else showToast('Nepodařilo se přidat otisk. Zkuste znovu.', 'danger');
+    }
+}
+async function webauthnAuthenticate() {
+    var creds = getWebauthnCredentials();
+    var ids = Object.keys(creds);
+    if (!ids.length) {
+        showToast('Žádný otisk není zaregistrován', 'warning');
+        return;
+    }
+    if (!isWebAuthnSupported()) {
+        showToast('Otisk / Face ID není podporováno', 'warning');
+        return;
+    }
+    var challenge = new Uint8Array(32);
+    crypto.getRandomValues(challenge);
+    var allowCredentials = ids.map(function(id) {
+        return { id: base64urlDecode(id), type: 'public-key' };
+    });
+    var options = {
+        challenge: challenge,
+        rpId: getRpId(),
+        allowCredentials: allowCredentials,
+        userVerification: 'preferred',
+        timeout: 60000
+    };
+    try {
+        var assertion = await navigator.credentials.get({ publicKey: options });
+        if (!assertion || !assertion.id) throw new Error('Ověření nebylo dokončeno');
+        var fisherId = creds[assertion.id];
+        if (!fisherId) throw new Error('Neznámý přihlašovací identifikátor');
+        var fisher = fishers.find(function(f) { return f.id === fisherId; });
+        if (!fisher) {
+            showToast('Držitel povolenky nenalezen', 'danger');
+            return;
+        }
+        try { localStorage.removeItem(LS.FISHER_ID); } catch (_) {}
+        showFisherView(fisher);
+        showToast('Vítejte, ' + fisher.name, 'success');
+    } catch (err) {
+        console.error('WebAuthn authenticate:', err);
+        if (err.name === 'NotAllowedError') showToast('Přihlášení zrušeno', 'warning');
+        else showToast('Nepodařilo se přihlásit otiskem', 'danger');
+    }
 }
 
 // ── Sync bar ──
@@ -362,97 +615,91 @@ function populateFisherSelects() {
 }
 
 // ════════════════════════════════════════
-// URL ACTION (naskenování QR)
+// PŘIHLAŠOVÁNÍ A ZOBRAZENÍ
 // ════════════════════════════════════════
-function handleUrlAction() {
-    const p = new URLSearchParams(window.location.search);
-    if (p.get('action') === 'register') {
-        showRegOverlay();
-        window.history.replaceState({}, '', getAppUrl());
-    }
+function showLoginScreen() {
+    $('#login-screen').style.display = 'flex';
+    $('#app-wrapper').style.display = 'none';
+    $('#fisher-profile').style.display = 'none';
+    updateBiometricLoginVisibility();
 }
-
-// ════════════════════════════════════════
-// REGISTRAČNÍ OVERLAY (nový člen přes QR)
-// ════════════════════════════════════════
-function showRegOverlay() {
-    $('#reg-form').reset();
-    $('#reg-overlay').style.display = 'flex';
+function showAdminView() {
+    $('#login-screen').style.display = 'none';
+    $('#app-wrapper').style.display = 'block';
+    $('#fisher-profile').style.display = 'none';
+    setAdminUnlocked(true);
+    rerender();
 }
-
-async function doRegSubmit() {
-    var name = $('#reg-name') && $('#reg-name').value ? $('#reg-name').value.trim() : '';
-    if (!name) { showToast('Zadejte jméno', 'warning'); return; }
-    var check = $('#reg-rad-confirm');
-    if (!check || !check.checked) { showToast('Zaškrtněte souhlas s rybářským řádem.', 'warning'); return; }
-    var number = $('#reg-number') && $('#reg-number').value ? $('#reg-number').value.trim() : '';
-    var phone  = $('#reg-phone') && $('#reg-phone').value ? $('#reg-phone').value.trim() : '';
-    var duplicate = fishers.find(function(f) {
-        if (f.name && name && f.name.trim().toLowerCase() === name.toLowerCase()) return true;
-        if (number && f.number && f.number.trim() === number) return true;
-        if (phone && f.phone && f.phone.trim().replace(/\s/g, '') === phone.replace(/\s/g, '')) return true;
-        return false;
-    });
-    if (duplicate) {
-        showToast('Už jste zaregistrován(a). Pokud máte dotazy, kontaktujte správce.', 'warning');
-        return;
-    }
-    var id   = genId();
-    var data = { id: id, name: name, number: number, phone: phone, registeredAt: new Date().toISOString() };
-    var btn = $('#reg-submit-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Ukládám…'; }
+function showFisherView(fisher) {
+    $('#login-screen').style.display = 'none';
+    $('#app-wrapper').style.display = 'none';
+    $('#fisher-profile').style.display = 'block';
+    try { localStorage.setItem(LS.FISHER_ID, fisher.id); } catch (_) {}
+    $('#fisher-profile-name').textContent = fisher.name;
+    renderFisherProfile(fisher);
+}
+function getLoggedInFisher() {
     try {
-        await dbSet('fishers', id, data);
-        if (fbReady && db) {
-            try { await db.ref('activity').push({ type: 'registration', name: name, id: id, at: data.registeredAt }); } catch (_) {}
-        }
-        var idx = fishers.findIndex(function(f) { return f.id === id; });
-        if (idx >= 0) fishers[idx] = data; else fishers.push(data);
-        lsSave(LS.FISHERS, fishers);
-        renderFishers();
-        populateFisherSelects();
-        $('#reg-overlay').style.display = 'none';
-        showToast('✅ ' + name + ' zaregistrován(a)!', 'success');
-    } catch (err) {
-        console.error('Registrace selhala:', err);
-        showToast('Nepodařilo se uložit. Zkontrolujte připojení k internetu a zkuste znovu.', 'danger');
-    }
-    if (btn) { btn.disabled = false; btn.textContent = 'Zaregistrovat se'; }
+        var id = localStorage.getItem(LS.FISHER_ID);
+        if (!id) return null;
+        return fishers.find(function(f) { return f.id === id; }) || null;
+    } catch (_) { return null; }
 }
-
-var regBtn = document.getElementById('reg-submit-btn');
-if (regBtn) regBtn.addEventListener('click', function() { doRegSubmit(); });
-$('#reg-form').addEventListener('submit', function(e) { e.preventDefault(); doRegSubmit(); });
 
 // ════════════════════════════════════════
 // RYBÁŘI
 // ════════════════════════════════════════
 let editingFisherId = null;
 
-$('#btn-new-fisher').addEventListener('click', () => {
+$('#btn-new-fisher').addEventListener('click', async () => {
     editingFisherId = null;
     $('#modal-fisher-title').textContent = 'Nový držitel povolenky';
     $('#fisher-form').reset();
+    $('#fisher-pin').value = await generateUniqueFisherPin();
+    $('#fisher-pin-hint').textContent = 'Předáte rybáři – slouží k přihlášení. Musí být unikátní.';
     openModal(modals.fisher);
 });
 
-$('#btn-reg-qr').addEventListener('click', () => {
-    const url  = getAppUrl() + '?action=register';
+$('#btn-app-qr').addEventListener('click', () => {
+    const url  = getAppUrl();
     const wrap = $('#qr-canvas-wrap');
     wrap.innerHTML = '';
     openModal(modals.qr);
     setTimeout(() => makeQr(wrap, url, 260), 50);
 });
 
+$('#fisher-gen-pin').addEventListener('click', async function() {
+    $('#fisher-pin').value = await generateUniqueFisherPin();
+});
 $('#fisher-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     var id   = editingFisherId || genId();
     var name = $('#fisher-name').value.trim();
     if (!name) return;
+    var pin  = $('#fisher-pin').value.trim();
+    var existing = fishers.find(function(f) { return f.id === id; });
+    var hasExistingPin = existing && existing.pinHash;
+    if (!pin && !hasExistingPin) {
+        showToast('PIN musí být 6 číslic', 'warning');
+        return;
+    }
+    if (pin && (pin.length !== 6 || !/^\d{6}$/.test(pin))) {
+        showToast('PIN musí být 6 číslic', 'warning');
+        return;
+    }
+    if (!pin) pin = existing.pinDisplay;
+    var used = pin ? await isPinUsedByOther(pin, editingFisherId || null) : false;
+    if (pin && used) {
+        showToast('Tento PIN už používá jiný rybář', 'danger');
+        return;
+    }
+    var pinHash = pin ? await hashPin(pin) : existing.pinHash;
     var data = {
         id: id, name: name,
         number:      $('#fisher-number').value.trim(),
         phone:       $('#fisher-phone').value.trim(),
+        pinHash:     pinHash,
+        pinDisplay:  pin || existing.pinDisplay || '',
         registeredAt: editingFisherId ? (fishers.find(function(f){ return f.id===id; }) && fishers.find(function(f){ return f.id===id; }).registeredAt || new Date().toISOString()) : new Date().toISOString()
     };
     try {
@@ -463,7 +710,7 @@ $('#fisher-form').addEventListener('submit', async function(e) {
         renderFishers();
         populateFisherSelects();
         closeModal(modals.fisher);
-        showToast(editingFisherId ? 'Držitel povolenky upraven' : (name + ' přidán'));
+        showToast(editingFisherId ? 'Držitel povolenky upraven' : (name + ' přidán · PIN: ' + pin));
     } catch (err) {
         console.error('Uložení držitele selhalo:', err);
         showToast('Nepodařilo se uložit. Zkontrolujte připojení.', 'danger');
@@ -477,28 +724,13 @@ function renderFishers() {
     const addBtn = $('#btn-new-fisher');
     const adminHint = $('#admin-hint');
     const adminLogout = $('#link-admin-logout');
-    const recentReg = $('#recent-registrations');
     if (addBtn) addBtn.style.display = admin ? '' : 'none';
     if (adminLogout) adminLogout.style.display = admin ? '' : 'none';
     if (adminHint) {
         if (admin) { adminHint.style.display = 'none'; }
         else {
             adminHint.style.display = 'block';
-            adminHint.innerHTML = 'Nové držitele přidávejte přes QR kód (tlačítko výše). Pro úpravu a mazání: <a href="#" id="link-admin-pin">zadejte PIN správce</a>.';
-        }
-    }
-    if (recentReg) {
-        if (admin && fbReady && activity.length) {
-            var regs = activity.slice(0, 10);
-            var items = regs.map(function(a) {
-                var d = (a.at || '').slice(0, 10);
-                var t = (a.at || '').slice(11, 16);
-                return '<li>' + esc(a.name || '') + (d ? ' <span class="recent-reg-date">' + d + ' ' + (t || '') + '</span>' : '') + '</li>';
-            }).join('');
-            recentReg.style.display = 'block';
-            recentReg.innerHTML = '<h3>📋 Poslední registrace (pro správce)</h3><ul>' + items + '</ul>';
-        } else {
-            recentReg.style.display = 'none';
+            adminHint.innerHTML = 'Pro úpravu a mazání: <a href="#" id="link-admin-pin">zadejte PIN správce</a>.';
         }
     }
 
@@ -528,7 +760,7 @@ function renderFishers() {
             <div class="fisher-avatar">${esc(initials(f.name))}</div>
             <div class="fisher-info">
                 <div class="fisher-name">${esc(f.name)}</div>
-                <div class="fisher-sub">${f.number ? '🪪 '+esc(f.number)+' · ' : ''}📅 ${yearCatches} úlovků letos${todayCI ? ' · <span style="color:var(--success);font-weight:700">✓ Dnes</span>' : ''}</div>
+                <div class="fisher-sub">${f.pinDisplay ? '🔑 PIN '+esc(f.pinDisplay)+' · ' : ''}${f.number ? '🪪 '+esc(f.number)+' · ' : ''}📅 ${yearCatches} úlovků letos${todayCI ? ' · <span style="color:var(--success);font-weight:700">✓ Dnes</span>' : ''}</div>
             </div>
             ${actions}
         </div>`;
@@ -543,6 +775,8 @@ window._editFisher = function(id) {
     $('#fisher-name').value   = f.name;
     $('#fisher-number').value = f.number || '';
     $('#fisher-phone').value  = f.phone  || '';
+    $('#fisher-pin').value    = f.pinDisplay || '';
+    $('#fisher-pin-hint').textContent = 'Změna PINu – musí zůstat unikátní.';
     openModal(modals.fisher);
 };
 
@@ -550,6 +784,7 @@ window._deleteFisher = async function(id) {
     var f = fishers.find(function(x) { return x.id === id; });
     if (!f || !confirm('Smazat držitele povolenky ' + f.name + ' včetně všech záznamů?')) return;
     try {
+        removeWebauthnCredentialForFisher(id);
         await dbRemove('fishers', id);
         var checkToDel = checkins.filter(function(c) { return c.fisherId === id; });
         var catchToDel = catches.filter(function(c) { return c.fisherId === id; });
@@ -894,6 +1129,7 @@ function openSettings() {
     $('#btn-disconnect-firebase').style.display = fbReady ? '' : 'none';
     var clearWrap = $('#settings-clear-data-wrap');
     if (clearWrap) clearWrap.style.display = (isAdminMode() && fbReady) ? 'block' : 'none';
+    renderAdminPinsList();
     updateFbStatusBox();
     openModal(modals.settings);
     var modalEl = modals.settings && modals.settings.querySelector('.modal');
@@ -955,6 +1191,221 @@ $('#btn-clear-all-data').addEventListener('click', function() {
 });
 
 // ════════════════════════════════════════
+// LOGIN HANDLER
+// ════════════════════════════════════════
+$('#login-biometric').addEventListener('click', function() { webauthnAuthenticate(); });
+$('#login-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var pin = $('#login-pin').value.trim();
+    if (!pin) { showToast('Zadejte PIN', 'warning'); return; }
+    var btn = $('#login-submit');
+    if (btn) { btn.disabled = true; btn.textContent = 'Ověřuji…'; }
+    try {
+        var h = await hashPin(pin);
+        var adminHashes = getAdminPinHashes();
+        if (!adminHashes.length && fbReady && db) {
+            var snap = await db.ref('config/adminPinHashes').once('value');
+            var v = snap.val();
+            if (v) {
+                if (Array.isArray(v)) cachedAdminPinHashes = v;
+                else cachedAdminPinHashes = Object.values(v);
+                adminHashes = cachedAdminPinHashes;
+            }
+            if (!adminHashes.length) {
+                var old = await db.ref('config/pinHash').once('value');
+                if (old.val()) { adminHashes = [old.val()]; setAdminPinHashes(adminHashes); }
+            }
+        }
+        if (adminHashes.indexOf(h) >= 0) {
+            try { localStorage.removeItem(LS.FISHER_ID); } catch (_) {}
+            showAdminView();
+            showToast('Přihlášen jako správce', 'success');
+        } else {
+            var fisher = fishers.find(function(f) { return f.pinHash === h; });
+            if (fisher) {
+                showFisherView(fisher);
+                showToast('Vítejte, ' + fisher.name, 'success');
+            } else {
+                showToast('Nesprávný PIN', 'danger');
+            }
+        }
+    } catch (err) {
+        console.error(err);
+        showToast('Chyba při ověření', 'danger');
+    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Přihlásit'; }
+    $('#login-pin').value = '';
+});
+
+// ════════════════════════════════════════
+// FISHER PROFILE
+// ════════════════════════════════════════
+function renderFisherProfile(fisher) {
+    var fid = fisher.id;
+    updateFisherBiometricButtons(fisher);
+    var myCheckins = checkins.filter(function(c) { return c.fisherId === fid; }).sort(function(a,b) { return b.date.localeCompare(a.date); }).slice(0, 15);
+    var myCatches = catches.filter(function(c) { return c.fisherId === fid; }).sort(function(a,b) { return b.timestamp.localeCompare(a.timestamp); }).slice(0, 15);
+    var myVisitors = visitors.filter(function(v) { return v.fisherId === fid; }).sort(function(a,b) { return b.date.localeCompare(a.date); }).slice(0, 10);
+    $('#fisher-my-checkins').innerHTML = myCheckins.length ? myCheckins.map(function(c) {
+        return '<div class="checkin-row"><span>' + fmtDate(c.date) + '</span><span>' + fmtTime(c.timestamp) + '</span></div>';
+    }).join('') : '<p class="empty-hint">Zatím žádné příchody</p>';
+    $('#fisher-my-catches').innerHTML = myCatches.length ? myCatches.map(function(c) {
+        return '<div class="catch-row"><span>🐟 ' + c.length + ' cm</span><span>' + fmtDateShort(c.date) + '</span>' + (c.kept ? ' <span class="catch-kept-badge">vzal</span>' : '') + '</div>';
+    }).join('') : '<p class="empty-hint">Zatím žádné úlovky</p>';
+    $('#fisher-my-visitors').innerHTML = myVisitors.length ? myVisitors.map(function(v) {
+        return '<div class="visit-row"><span>👤 ' + esc(v.visitorName) + '</span><span>' + fmtDate(v.date) + ' · ' + (v.fee || FEE_VISIT) + ' Kč</span></div>';
+    }).join('') : '<p class="empty-hint">Zatím žádné návštěvy</p>';
+}
+$('#fisher-logout').addEventListener('click', function() {
+    try { localStorage.removeItem(LS.FISHER_ID); } catch (_) {}
+    showLoginScreen();
+    showToast('Odhlášeno');
+});
+$('#fisher-btn-checkin').addEventListener('click', async function() {
+    var fisher = getLoggedInFisher();
+    if (!fisher) return;
+    var date = today();
+    var already = checkins.find(function(c) { return c.fisherId === fisher.id && c.date === date; });
+    if (already) { showToast('Dnes už máte zapsaný příchod', 'warning'); return; }
+    var id = genId();
+    var ci = { id: id, fisherId: fisher.id, date: date, timestamp: new Date().toISOString() };
+    try {
+        await dbSet('checkins', id, ci);
+        checkins.push(ci);
+        lsSave(LS.CHECKINS, checkins);
+        renderFisherProfile(fisher);
+        showToast('✓ Příchod zapsán', 'success');
+    } catch (err) {
+        showToast('Nepodařilo se zapsat', 'danger');
+    }
+});
+$('#fisher-btn-catch').addEventListener('click', function() {
+    $('#fisher-catch-length').value = '';
+    $('#fisher-catch-length-hint').textContent = '';
+    $('#fisher-catch-kept').checked = false;
+    openModal($('#modal-fisher-catch'));
+});
+$('#fisher-btn-visit').addEventListener('click', function() {
+    $('#fisher-visit-name').value = '';
+    openModal($('#modal-fisher-visit'));
+});
+$('#fisher-catch-length').addEventListener('input', function() {
+    var val = parseInt(this.value);
+    var hint = $('#fisher-catch-length-hint');
+    if (!val) { hint.textContent = ''; return; }
+    hint.textContent = (val >= MIN_LEN && val <= MAX_LEN) ? '✓ V normě' : '⚠ Mimo normu';
+});
+$('#fisher-catch-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var fisher = getLoggedInFisher();
+    if (!fisher) return;
+    var length = parseInt($('#fisher-catch-length').value, 10);
+    var kept = $('#fisher-catch-kept').checked;
+    if (!length || length < 5 || length > 150) { showToast('Zadejte délku 5–150 cm', 'warning'); return; }
+    var id = genId();
+    var cat = { id: id, fisherId: fisher.id, species: SPECIES, length: length, kept: kept, inRange: length >= MIN_LEN && length <= MAX_LEN, date: today(), timestamp: new Date().toISOString() };
+    try {
+        await dbSet('catches', id, cat);
+        catches.push(cat);
+        lsSave(LS.CATCHES, catches);
+        closeModal($('#modal-fisher-catch'));
+        renderFisherProfile(fisher);
+        showToast('🐟 Úlovek ' + length + ' cm zapsán', 'success');
+    } catch (err) { showToast('Nepodařilo se zapsat', 'danger'); }
+});
+$('#fisher-visit-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var fisher = getLoggedInFisher();
+    if (!fisher) return;
+    var name = $('#fisher-visit-name').value.trim();
+    if (!name) { showToast('Zadejte jméno návštěvy', 'warning'); return; }
+    var id = genId();
+    var v = { id: id, fisherId: fisher.id, visitorName: name, date: today(), fee: FEE_VISIT, timestamp: new Date().toISOString() };
+    try {
+        await dbSet('visitors', id, v);
+        visitors.push(v);
+        lsSave(LS.VISITORS, visitors);
+        closeModal($('#modal-fisher-visit'));
+        renderFisherProfile(fisher);
+        showToast('👥 Návštěva zapsána · 300 Kč', 'success');
+    } catch (err) { showToast('Nepodařilo se zapsat', 'danger'); }
+});
+$('#modal-close-fisher-catch').addEventListener('click', function() { closeModal($('#modal-fisher-catch')); });
+$('#modal-close-fisher-visit').addEventListener('click', function() { closeModal($('#modal-fisher-visit')); });
+$('#btn-podminky-fisher').addEventListener('click', function(e) { e.preventDefault(); openModal(modals.podminky); });
+$('#fisher-btn-add-biometric').addEventListener('click', function() {
+    var fisher = getLoggedInFisher();
+    if (fisher) webauthnRegister(fisher.id, fisher.name);
+});
+$('#fisher-btn-remove-biometric').addEventListener('click', function() {
+    var fisher = getLoggedInFisher();
+    if (!fisher) return;
+    if (!confirm('Odstranit otisk / Face ID? Budete se přihlašovat jen PINem.')) return;
+    removeWebauthnCredentialForFisher(fisher.id);
+    updateFisherBiometricButtons(fisher);
+    updateBiometricLoginVisibility();
+    showToast('Otisk / Face ID odstraněn', 'success');
+});
+$('#fisher-btn-change-pin').addEventListener('click', function() {
+    $('#fisher-pin-new').value = '';
+    $('#fisher-pin-confirm').value = '';
+    openModal($('#modal-fisher-change-pin'));
+});
+$('#modal-close-fisher-pin').addEventListener('click', function() { closeModal($('#modal-fisher-change-pin')); });
+$('#fisher-change-pin-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var fisher = getLoggedInFisher();
+    if (!fisher) return;
+    var newPin = $('#fisher-pin-new').value.trim();
+    var conf = $('#fisher-pin-confirm').value.trim();
+    if (newPin.length !== 6 || !/^\d{6}$/.test(newPin)) { showToast('PIN musí být 6 číslic', 'warning'); return; }
+    if (newPin !== conf) { showToast('PINy se neshodují', 'danger'); return; }
+    var used = await isPinUsedByOther(newPin, fisher.id);
+    if (used) { showToast('Tento PIN už používá jiný rybář', 'danger'); return; }
+    var pinHash = await hashPin(newPin);
+    fisher.pinHash = pinHash;
+    fisher.pinDisplay = newPin;
+    try {
+        await dbSet('fishers', fisher.id, fisher);
+        lsSave(LS.FISHERS, fishers);
+        closeModal($('#modal-fisher-change-pin'));
+        showToast('PIN změněn', 'success');
+    } catch (err) { showToast('Nepodařilo se uložit', 'danger'); }
+});
+
+// ════════════════════════════════════════
+// NASTAVENÍ – seznam admin PINů
+// ════════════════════════════════════════
+function renderAdminPinsList() {
+    var list = $('#admin-pins-list');
+    if (!list) return;
+    var hashes = getAdminPinHashes();
+    if (!hashes.length) {
+        list.innerHTML = '<p class="form-hint">Zatím žádný správce. Přidejte první.</p>';
+        return;
+    }
+    var items = hashes.map(function(h, i) {
+        var displayName = getAdminDisplayName(h) || ('Správce ' + (i + 1));
+        var canRemove = hashes.length > 1;
+        var removeBtn = canRemove ? '<button type="button" class="btn btn-danger btn-sm admin-pin-remove" data-hash="' + h + '" title="Odstranit správce">✕</button>' : '<span class="form-hint" style="font-size:.75rem;">(poslední)</span>';
+        return '<div class="pin-item"><span class="pin-item-name">' + esc(displayName) + '</span>' + removeBtn + '</div>';
+    }).join('');
+    list.innerHTML = '<p class="form-hint" style="margin-bottom:.5rem;">Aktivní správci (' + hashes.length + '):</p>' + items;
+    list.querySelectorAll('.admin-pin-remove').forEach(function(btn) {
+        btn.onclick = function() {
+            var h = btn.getAttribute('data-hash');
+            if (!h || !confirm('Odstranit tohoto správce? Nebude se moci přihlásit.')) return;
+            if (removeAdminPinHash(h)) {
+                renderAdminPinsList();
+                showToast('Správce odstraněn', 'success');
+            } else {
+                showToast('Musí zůstat alespoň jeden správce', 'warning');
+            }
+        };
+    });
+}
+
+// ════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════
 fishers  = lsLoad(LS.FISHERS);
@@ -962,35 +1413,42 @@ checkins = lsLoad(LS.CHECKINS);
 catches  = lsLoad(LS.CATCHES);
 visitors = lsLoad(LS.VISITORS);
 
-// Vždy zkusit připojit Firebase (i při stažené aplikaci) – nejdřív výchozí config z kódu
 var storedUrl = localStorage.getItem(LS.FB_URL);
 var storedKey = localStorage.getItem(LS.FB_KEY);
 var fbUrl = (storedUrl && storedUrl.trim()) ? storedUrl.trim() : FB_CONFIG.databaseURL;
 var fbKey = (storedKey && storedKey.trim()) ? storedKey.trim() : FB_CONFIG.apiKey;
 if (fbUrl && fbKey) initFirebase(fbUrl, fbKey);
 
+if (!fbReady) {
+    try {
+        var w = localStorage.getItem(LS.WEBAUTHN);
+        if (w) { var o = JSON.parse(w); cachedWebauthnCredentials = (o && typeof o === 'object') ? o : {}; }
+    } catch (_) {}
+}
+updateBiometricLoginVisibility();
 updateSyncBar();
 initYearSelectors();
-renderFishers();
 populateFisherSelects();
-
-$('#ci-date').value    = today();
+$('#ci-date').value = today();
 $('#catch-date').value = today();
 $('#visit-date').value = today();
 
-handleUrlAction();
-// Klik na "zadejte PIN správce" otevře modal
-document.addEventListener('click', e => {
-    if (e.target.id === 'link-admin-pin') {
-        e.preventDefault();
-        openModal(modals.adminPin);
-        $('#admin-pin-input').value = '';
-        $('#admin-pin-input').focus();
+if (isAdminMode()) {
+    showAdminView();
+    renderFishers();
+} else {
+    var fisher = getLoggedInFisher();
+    if (fisher) {
+        showFisherView(fisher);
+    } else {
+        showLoginScreen();
     }
+}
+document.addEventListener('click', function(e) {
     if (e.target.id === 'link-admin-logout') {
         e.preventDefault();
         setAdminUnlocked(false);
-        renderFishers();
+        showLoginScreen();
         showToast('Odhlášeno ze správce');
     }
 });
