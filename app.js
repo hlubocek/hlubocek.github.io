@@ -386,7 +386,8 @@ if (regOpenPdfBtn) regOpenPdfBtn.addEventListener('click', function() {
     var overlay = document.getElementById('reg-pdf-overlay');
     var iframe = document.getElementById('reg-pdf-iframe');
     if (overlay && iframe) {
-        iframe.src = 'Rybarsky-rad-Hlubocek.pdf';
+        var pdfUrl = new URL('Rybarsky-rad-Hlubocek.pdf', window.location.href).href;
+        iframe.src = 'https://docs.google.com/viewer?url=' + encodeURIComponent(pdfUrl) + '&embedded=true';
         overlay.style.display = 'flex';
     }
 });
