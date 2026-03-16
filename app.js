@@ -378,7 +378,25 @@ function handleUrlAction() {
 function showRegOverlay() {
     $('#reg-form').reset();
     $('#reg-overlay').style.display = 'flex';
+    var pdfOverlay = document.getElementById('reg-pdf-overlay');
+    if (pdfOverlay) pdfOverlay.style.display = 'none';
 }
+var regOpenPdfBtn = document.getElementById('reg-open-pdf-btn');
+if (regOpenPdfBtn) regOpenPdfBtn.addEventListener('click', function() {
+    var overlay = document.getElementById('reg-pdf-overlay');
+    var iframe = document.getElementById('reg-pdf-iframe');
+    if (overlay && iframe) {
+        iframe.src = 'Rybarsky-rad-Hlubocek.pdf';
+        overlay.style.display = 'flex';
+    }
+});
+var regPdfCloseBtn = document.getElementById('reg-pdf-close-btn');
+if (regPdfCloseBtn) regPdfCloseBtn.addEventListener('click', function() {
+    var overlay = document.getElementById('reg-pdf-overlay');
+    var iframe = document.getElementById('reg-pdf-iframe');
+    if (overlay) overlay.style.display = 'none';
+    if (iframe) iframe.src = '';
+});
 
 async function doRegSubmit() {
     var name = $('#reg-name') && $('#reg-name').value ? $('#reg-name').value.trim() : '';
