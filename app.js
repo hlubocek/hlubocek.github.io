@@ -166,7 +166,7 @@ function refetchAllFromFirebase() {
 function dedupeCatches(arr) {
     var seen = new Set();
     return arr.filter(function(c) {
-        var key = (c.fisherId || '') + '|' + (c.date || '') + '|' + (c.timestamp || '') + '|' + (c.length || '') + '|' + (c.kept ? '1' : '0');
+        var key = (c.fisherId || '') + '|' + (c.date || '') + '|' + (c.length || '') + '|' + (c.kept ? '1' : '0');
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -175,7 +175,7 @@ function dedupeCatches(arr) {
 function dedupeCheckins(arr) {
     var seen = new Set();
     return arr.filter(function(c) {
-        var key = (c.fisherId || '') + '|' + (c.date || '') + '|' + (c.timestamp || '');
+        var key = (c.fisherId || '') + '|' + (c.date || '');
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -184,7 +184,7 @@ function dedupeCheckins(arr) {
 function dedupeVisitors(arr) {
     var seen = new Set();
     return arr.filter(function(v) {
-        var key = (v.fisherId || '') + '|' + (v.date || '') + '|' + (v.visitorName || '') + '|' + (v.timestamp || '');
+        var key = (v.fisherId || '') + '|' + (v.date || '') + '|' + (v.visitorName || '');
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
