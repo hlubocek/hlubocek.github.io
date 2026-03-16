@@ -32,9 +32,37 @@
 .admin-switch-link:hover { text-decoration: underline; }
 
 /* ── FISHER PROFILE ── */
-.fisher-header { background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: #fff; padding: 1rem; position: relative; }
-.fisher-header-btns { position: absolute; top: .75rem; right: .75rem; display: flex; gap: .35rem; }
-.fisher-header-btns .header-settings-btn { position: static; }
+.fisher-header {
+    background: linear-gradient(135deg, var(--primary-dark), var(--primary));
+    color: #fff;
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 72px;
+}
+.fisher-header .header-content {
+    flex: 1;
+    min-width: 0;
+    padding-right: .5rem;
+}
+.fisher-header .header-content h1 { font-size: 1.25rem; margin: 0; }
+.fisher-header .header-content .subtitle { font-size: .8rem; opacity: .9; margin-top: .15rem; }
+.fisher-header-btns {
+    flex-shrink: 0;
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+}
+.fisher-header-btns .header-settings-btn {
+    position: static;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    font-size: 1.1rem;
+}
 .fisher-main { max-width: 640px; margin: 0 auto; padding: 1rem; padding-bottom: 2rem; }
 .fisher-actions-grid { display: grid; gap: .65rem; margin-bottom: 1.5rem; }
 .fisher-action-btn { padding: .9rem; font-size: 1rem; }
