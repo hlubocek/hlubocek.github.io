@@ -377,94 +377,15 @@ function handleUrlAction() {
 // ════════════════════════════════════════
 function showRegOverlay() {
     $('#reg-form').reset();
-    var scrollEl = $('#reg-rad-scroll'), checkEl = $('#reg-rad-confirm'), btn = $('#reg-submit-btn'), hint = $('#reg-rad-confirm-text'), strip = $('#reg-warning-strip');
-    if (scrollEl) { scrollEl.scrollTop = 0; }
-    if (checkEl) { checkEl.checked = false; checkEl.disabled = true; }
-    if (btn) btn.disabled = true;
-    if (hint) hint.textContent = 'Dojeďte dolů, poté zde potvrďte přečtení řádu.';
-    if (strip) strip.style.display = 'none';
     $('#reg-overlay').style.display = 'flex';
-    if (window._regNoScrollTimer) { clearTimeout(window._regNoScrollTimer); window._regNoScrollTimer = null; }
-    if (window._regScrollTimer) clearTimeout(window._regScrollTimer);
-    window._regScrollTimer = setTimeout(function() { try { regCheckScrollEnd(); } catch (_) {} }, 300);
 }
-
-function regCheckScrollEnd() {
-    var el = $('#reg-rad-scroll'), card = $('#reg-card'), check = $('#reg-rad-confirm'), hint = $('#reg-rad-confirm-text');
-    if (!el || !check) return;
-    var scrollable = el.scrollHeight > el.clientHeight + 15;
-    var atBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 25;
-    var cardScrolledToBottom = false;
-    if (card && card.scrollHeight > card.clientHeight + 20) {
-        cardScrolledToBottom = card.scrollHeight - card.scrollTop <= card.clientHeight + 40;
-    }
-    if ((scrollable && atBottom) || cardScrolledToBottom) {
-        if (window._regNoScrollTimer) { clearTimeout(window._regNoScrollTimer); window._regNoScrollTimer = null; }
-        check.disabled = false;
-        if (hint) hint.textContent = 'Potvrzuji, že jsem se seznámil(a) s rybářským řádem a souhlasím s ním.';
-        var ws = $('#reg-warning-strip'); if (ws) ws.style.display = 'none';
-    } else if (!scrollable && !cardScrolledToBottom) {
-        if (window._regNoScrollTimer) return;
-        window._regNoScrollTimer = setTimeout(function() {
-            window._regNoScrollTimer = null;
-            check.disabled = false;
-            if (hint) hint.textContent = 'Potvrzuji, že jsem se seznámil(a) s rybářským řádem a souhlasím s ním.';
-            var ws = $('#reg-warning-strip'); if (ws) ws.style.display = 'none';
-        }, 3000);
-    }
-}
-
-var regScrollEl = $('#reg-rad-scroll');
-var regCardEl = $('#reg-card');
-function regScheduleScrollCheck() {
-    if (window._regScrollCheckTimer) clearTimeout(window._regScrollCheckTimer);
-    window._regScrollCheckTimer = setTimeout(function() {
-        window._regScrollCheckTimer = null;
-        if (window._regNoScrollTimer) { clearTimeout(window._regNoScrollTimer); window._regNoScrollTimer = null; }
-        regCheckScrollEnd();
-    }, 100);
-}
-if (regScrollEl) {
-    regScrollEl.addEventListener('scroll', regScheduleScrollCheck);
-    regScrollEl.addEventListener('touchend', regScheduleScrollCheck, { passive: true });
-}
-if (regCardEl) {
-    regCardEl.addEventListener('scroll', regScheduleScrollCheck);
-    regCardEl.addEventListener('touchend', regScheduleScrollCheck, { passive: true });
-}
-var regConfirmEl = $('#reg-rad-confirm');
-if (regConfirmEl) regConfirmEl.addEventListener('change', function() {
-    var btn = $('#reg-submit-btn');
-    if (btn) btn.disabled = !$('#reg-rad-confirm').checked;
-    var ws = $('#reg-warning-strip'); if (ws) ws.style.display = 'none';
-});
-// Tlačítko „Potvrdit přečtení“ – spolehlivé na mobilu, když scroll detekce selže
-var regConfirmBtn = $('#reg-confirm-btn');
-if (regConfirmBtn) regConfirmBtn.addEventListener('click', function() {
-    var check = $('#reg-rad-confirm'), hint = $('#reg-rad-confirm-text'), ws = $('#reg-warning-strip');
-    if (check) { check.disabled = false; check.checked = true; }
-    if (hint) hint.textContent = 'Potvrzuji, že jsem se seznámil(a) s rybářským řádem a souhlasím s ním.';
-    if (ws) ws.style.display = 'none';
-    var submitBtn = $('#reg-submit-btn');
-    if (submitBtn) submitBtn.disabled = false;
-});
-$('#reg-submit-btn').addEventListener('click', function() {
-    if (this.disabled) {
-        var strip = $('#reg-warning-strip'), card = $('#reg-card');
-        if (strip) { strip.style.display = 'flex'; strip.setAttribute('aria-live', 'assertive'); }
-        if (card) card.scrollTop = 0;
-    }
-});
 
 $('#reg-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     var name = $('#reg-name').value.trim();
     if (!name) return;
     if (!$('#reg-rad-confirm').checked) {
-        var strip = $('#reg-warning-strip'), card = $('#reg-card');
-        if (strip) { strip.style.display = 'flex'; strip.setAttribute('aria-live', 'assertive'); }
-        if (card) card.scrollTop = 0;
-        showToast('Potvrďte přečtení rybářského řádu.', 'warning');
+        showToast('Zaškrtněte souhlas s rybářským řádem.', 'warning');
         return;
     }
     var number = $('#reg-number').value.trim();

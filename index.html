@@ -174,32 +174,13 @@
     <!-- REGISTRACE – fullscreen overlay po naskenování QR -->
     <div id="reg-overlay" class="checkin-overlay" style="display:none;">
         <div class="checkin-card" id="reg-card">
-            <div id="reg-warning-strip" class="reg-warning-strip" style="display:none;" role="alert">
-                ⚠️ Nejprve pročtěte výtah z rybářského řádu dole, dojeďte úplně dolů a zaškrtněte potvrzení.
-            </div>
             <div class="checkin-fish-icon">🎣</div>
             <h2>Hluboček</h2>
             <p class="checkin-location">📍 Registrace nového držitele povolenky</p>
-            <form id="reg-form" style="text-align:left;margin-top:1.1rem;">
+            <form id="reg-form" novalidate style="text-align:left;margin-top:1rem;">
                 <p class="reg-rad-intro">
-                    <a href="Rybarsky-rad-Hlubocek.pdf" target="_blank" rel="noopener" class="reg-rad-pdf-link">📄 Otevřít Rybářský řád (PDF)</a>
+                    <a href="Rybarsky-rad-Hlubocek.pdf" target="_blank" rel="noopener" class="reg-rad-pdf-link">📄 Rybářský řád (PDF)</a>
                 </p>
-                <div class="reg-rad-scroll" id="reg-rad-scroll">
-                    <p><strong>Výtah z rybářského řádu – pročtěte a dojeďte dolů</strong></p>
-                    <ul>
-                        <li>Rybolov pouze pro držitele povolenek (členy místního rybářského spolku).</li>
-                        <li>Kapr při přisvojení: míra 45–60 cm (dospělý max. 3 ks/rok, 1 ks/den; dítě 8–14 let 1 ks/rok).</li>
-                        <li>Přisvojenou rybu zapsat v aplikaci v den ulovení.</li>
-                        <li>Návštěvy pouze v doprovodu držitele povolenky; poplatek 300 Kč / 24 h. Návštěva si <strong>nesmí přisvojit žádnou rybu</strong>.</li>
-                        <li>Docházku zapsat ihned po příchodu, úlovky a návštěvy evidovat v aplikaci.</li>
-                    </ul>
-                    <p class="reg-rad-full">Plné znění viz PDF výše.</p>
-                    <label class="reg-rad-confirm-label">
-                        <input type="checkbox" id="reg-rad-confirm" required disabled>
-                        <span id="reg-rad-confirm-text">Potvrzuji, že jsem se seznámil(a) s rybářským řádem a souhlasím s ním.</span>
-                    </label>
-                    <button type="button" id="reg-confirm-btn" class="btn btn-secondary btn-sm" style="margin-top:.5rem;">✓ Potvrdit přečtení řádu</button>
-                </div>
                 <div class="form-group">
                     <label for="reg-name">Jméno a příjmení</label>
                     <input type="text" id="reg-name" placeholder="Jan Novák" required>
@@ -212,7 +193,13 @@
                     <label for="reg-phone">Telefon</label>
                     <input type="tel" id="reg-phone" placeholder="+420 123 456 789">
                 </div>
-                <button type="submit" class="btn btn-primary btn-full" id="reg-submit-btn" style="margin-top:.5rem;" disabled>Zaregistrovat se</button>
+                <div class="reg-confirm-wrap">
+                    <label class="reg-rad-confirm-label">
+                        <input type="checkbox" id="reg-rad-confirm" required>
+                        <span>Souhlasím s rybářským řádem</span>
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full" id="reg-submit-btn" style="margin-top:.75rem;">Zaregistrovat se</button>
             </form>
         </div>
     </div>
