@@ -390,13 +390,16 @@ if (regOpenPdfBtn) regOpenPdfBtn.addEventListener('click', function() {
         overlay.style.display = 'flex';
     }
 });
-var regPdfCloseBtn = document.getElementById('reg-pdf-close-btn');
-if (regPdfCloseBtn) regPdfCloseBtn.addEventListener('click', function() {
+function closeRegPdfOverlay() {
     var overlay = document.getElementById('reg-pdf-overlay');
     var iframe = document.getElementById('reg-pdf-iframe');
     if (overlay) overlay.style.display = 'none';
     if (iframe) iframe.src = '';
-});
+}
+var regPdfCloseBtn = document.getElementById('reg-pdf-close-btn');
+if (regPdfCloseBtn) regPdfCloseBtn.addEventListener('click', closeRegPdfOverlay);
+var regPdfCloseBtnBottom = document.getElementById('reg-pdf-close-btn-bottom');
+if (regPdfCloseBtnBottom) regPdfCloseBtnBottom.addEventListener('click', closeRegPdfOverlay);
 
 async function doRegSubmit() {
     var name = $('#reg-name') && $('#reg-name').value ? $('#reg-name').value.trim() : '';
