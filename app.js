@@ -29,7 +29,8 @@ const LS = {
     ADMIN:     'hlb_admin',
     ADMIN_PIN: 'hlb_admin_pin',
     FISHER_ID: 'hlb_fisher_id',
-    WEBAUTHN:  'hlb_webauthn'
+    WEBAUTHN:  'hlb_webauthn',
+    LAST_VIEW: 'hlb_last_view'  // 'admin' | 'fisher' – při obnovení stránky zachovat zobrazení
 };
 
 // ════════════════════════════════════════
@@ -160,6 +161,34 @@ function refetchAllFromFirebase() {
         rerender();
         showToast('Data načtena', 'success');
     }).catch(function() { showToast('Nepodařilo se načíst data', 'danger'); });
+}
+
+function dedupeCatches(arr) {
+    var seen = new Set();
+    return arr.filter(function(c) {
+        var key = (c.fisherId || '') + '|' + (c.date || '') + '|' + (c.timestamp || '') + '|' + (c.length || '') + '|' + (c.kept ? '1' : '0');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+function dedupeCheckins(arr) {
+    var seen = new Set();
+    return arr.filter(function(c) {
+        var key = (c.fisherId || '') + '|' + (c.date || '') + '|' + (c.timestamp || '');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+function dedupeVisitors(arr) {
+    var seen = new Set();
+    return arr.filter(function(v) {
+        var key = (v.fisherId || '') + '|' + (v.date || '') + '|' + (v.visitorName || '') + '|' + (v.timestamp || '');
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
 }
 
 function rerender() {
@@ -637,6 +666,7 @@ function showLoginScreen() {
     document.querySelectorAll('.modal-overlay.open').forEach(function(m) { m.classList.remove('open'); });
     document.body.style.overflow = '';
     pendingLoginFisher = null;
+    try { localStorage.removeItem(LS.LAST_VIEW); } catch (_) {}
     var pinInput = $('#login-pin');
     if (pinInput) { pinInput.value = ''; pinInput.disabled = false; setTimeout(function() { pinInput.focus(); }, 100); }
     var submitBtn = $('#login-submit');
@@ -648,13 +678,14 @@ function showAdminView() {
     $('#app-wrapper').style.display = 'block';
     $('#fisher-profile').style.display = 'none';
     setAdminUnlocked(true);
+    try { localStorage.setItem(LS.LAST_VIEW, 'admin'); } catch (_) {}
     rerender();
 }
 function showFisherView(fisher) {
     $('#login-screen').style.display = 'none';
     $('#app-wrapper').style.display = 'none';
     $('#fisher-profile').style.display = 'block';
-    try { localStorage.setItem(LS.FISHER_ID, fisher.id); } catch (_) {}
+    try { localStorage.setItem(LS.FISHER_ID, fisher.id); localStorage.setItem(LS.LAST_VIEW, 'fisher'); } catch (_) {}
     $('#fisher-profile-name').textContent = fisher.name;
     renderFisherProfile(fisher);
 }
@@ -846,8 +877,7 @@ $('#btn-ci-submit').addEventListener('click', async function() {
     var ci = { id: id, fisherId: fid, date: date, timestamp: new Date().toISOString() };
     try {
         await dbSet('checkins', id, ci);
-        checkins.push(ci);
-        lsSave(LS.CHECKINS, checkins);
+        if (!fbReady) { checkins.push(ci); lsSave(LS.CHECKINS, checkins); }
         renderDochazka();
         showToast('✓ Příchod zapsán', 'success');
     } catch (err) {
@@ -862,7 +892,8 @@ function renderDochazka() {
         cont.innerHTML = `<div class="empty-state"><span class="empty-icon">📅</span><p>Žádné záznamy příchodů.</p></div>`;
         return;
     }
-    const sorted = [...checkins].sort((a,b) => b.date.localeCompare(a.date) || b.timestamp.localeCompare(a.timestamp));
+    const deduped = dedupeCheckins(checkins);
+    const sorted = [...deduped].sort((a,b) => b.date.localeCompare(a.date) || b.timestamp.localeCompare(a.timestamp));
     const groups = {};
     sorted.forEach(ci => { if (!groups[ci.date]) groups[ci.date] = []; groups[ci.date].push(ci); });
 
@@ -928,8 +959,7 @@ $('#btn-catch-submit').addEventListener('click', async function() {
     };
     try {
         await dbSet('catches', id, cat);
-        catches.push(cat);
-        lsSave(LS.CATCHES, catches);
+        if (!fbReady) { catches.push(cat); lsSave(LS.CATCHES, catches); }
         renderUlovky();
         $('#catch-length').value   = '';
         $('#catch-length-hint').textContent = '';
@@ -948,7 +978,8 @@ function renderUlovky() {
         cont.innerHTML = `<div class="empty-state"><span class="empty-icon">🐟</span><p>Zatím žádné úlovky.</p></div>`;
         return;
     }
-    const sorted = [...catches].sort((a,b) => b.timestamp.localeCompare(a.timestamp));
+    const deduped = dedupeCatches(catches);
+    const sorted = [...deduped].sort((a,b) => b.timestamp.localeCompare(a.timestamp));
     const years  = [...new Set(sorted.map(c => c.timestamp?.slice(0,4)))].sort().reverse();
     const selYear = $('#ulovky-year-sel')?.value || years[0];
     const filtered = sorted.filter(c => c.timestamp?.startsWith(selYear));
@@ -1007,8 +1038,7 @@ $('#btn-visit-submit').addEventListener('click', async function() {
     var v   = { id: id, fisherId: fid, visitorName: visitorName, date: date, fee: FEE_VISIT, timestamp: new Date().toISOString() };
     try {
         await dbSet('visitors', id, v);
-        visitors.push(v);
-        lsSave(LS.VISITORS, visitors);
+        if (!fbReady) { visitors.push(v); lsSave(LS.VISITORS, visitors); }
         renderNavstevy();
         $('#visit-name').value = '';
         showToast('👥 Návštěva zapsána · ' + FEE_VISIT + ' Kč', 'success');
@@ -1024,7 +1054,8 @@ function renderNavstevy() {
         cont.innerHTML = `<div class="empty-state"><span class="empty-icon">👥</span><p>Žádné záznamy návštěv.</p></div>`;
         return;
     }
-    const sorted  = [...visitors].sort((a,b) => b.date.localeCompare(a.date) || b.timestamp.localeCompare(a.timestamp));
+    const deduped = dedupeVisitors(visitors);
+    const sorted  = [...deduped].sort((a,b) => b.date.localeCompare(a.date) || b.timestamp.localeCompare(a.timestamp));
     const years   = [...new Set(sorted.map(v => v.timestamp?.slice(0,4)))].sort().reverse();
     const selYear = $('#navstevy-year-sel')?.value || years[0];
     const filtered  = sorted.filter(v => v.timestamp?.startsWith(selYear));
@@ -1368,9 +1399,14 @@ function renderFisherProfile(fisher) {
     updateFisherBiometricButtons(fisher);
     var switchBtn = $('#fisher-switch-admin');
     if (switchBtn) switchBtn.style.display = isFisherAlsoAdmin(fisher) ? '' : 'none';
-    var myCheckins = checkins.filter(function(c) { return c.fisherId === fid; }).sort(function(a,b) { return b.date.localeCompare(a.date); }).slice(0, 15);
-    var myCatches = catches.filter(function(c) { return c.fisherId === fid; }).sort(function(a,b) { return b.timestamp.localeCompare(a.timestamp); }).slice(0, 15);
-    var myVisitors = visitors.filter(function(v) { return v.fisherId === fid; }).sort(function(a,b) { return b.date.localeCompare(a.date); }).slice(0, 10);
+    var settingsBtn = $('#fisher-settings');
+    if (settingsBtn) {
+        var hasSettingsUse = isFisherAlsoAdmin(fisher) || isWebAuthnSupported();
+        settingsBtn.style.display = hasSettingsUse ? '' : 'none';
+    }
+    var myCheckins = dedupeCheckins(checkins.filter(function(c) { return c.fisherId === fid; })).sort(function(a,b) { return b.date.localeCompare(a.date); }).slice(0, 15);
+    var myCatches = dedupeCatches(catches.filter(function(c) { return c.fisherId === fid; })).sort(function(a,b) { return b.timestamp.localeCompare(a.timestamp); }).slice(0, 15);
+    var myVisitors = dedupeVisitors(visitors.filter(function(v) { return v.fisherId === fid; })).sort(function(a,b) { return b.date.localeCompare(a.date); }).slice(0, 10);
     $('#fisher-my-checkins').innerHTML = myCheckins.length ? myCheckins.map(function(c) {
         return '<div class="checkin-row"><span>' + fmtDate(c.date) + '</span><span>' + fmtTime(c.timestamp) + '</span></div>';
     }).join('') : '<p class="empty-hint">Zatím žádné příchody</p>';
@@ -1397,8 +1433,7 @@ $('#fisher-btn-checkin').addEventListener('click', async function() {
     var ci = { id: id, fisherId: fisher.id, date: date, timestamp: new Date().toISOString() };
     try {
         await dbSet('checkins', id, ci);
-        checkins.push(ci);
-        lsSave(LS.CHECKINS, checkins);
+        if (!fbReady) { checkins.push(ci); lsSave(LS.CHECKINS, checkins); }
         renderFisherProfile(fisher);
         showToast('✓ Příchod zapsán', 'success');
     } catch (err) {
@@ -1432,8 +1467,7 @@ $('#fisher-catch-form').addEventListener('submit', async function(e) {
     var cat = { id: id, fisherId: fisher.id, species: SPECIES, length: length, kept: kept, inRange: length >= MIN_LEN && length <= MAX_LEN, date: today(), timestamp: new Date().toISOString() };
     try {
         await dbSet('catches', id, cat);
-        catches.push(cat);
-        lsSave(LS.CATCHES, catches);
+        if (!fbReady) { catches.push(cat); lsSave(LS.CATCHES, catches); }
         closeModal($('#modal-fisher-catch'));
         renderFisherProfile(fisher);
         showToast('🐟 Úlovek ' + length + ' cm zapsán', 'success');
@@ -1449,8 +1483,7 @@ $('#fisher-visit-form').addEventListener('submit', async function(e) {
     var v = { id: id, fisherId: fisher.id, visitorName: name, date: today(), fee: FEE_VISIT, timestamp: new Date().toISOString() };
     try {
         await dbSet('visitors', id, v);
-        visitors.push(v);
-        lsSave(LS.VISITORS, visitors);
+        if (!fbReady) { visitors.push(v); lsSave(LS.VISITORS, visitors); }
         closeModal($('#modal-fisher-visit'));
         renderFisherProfile(fisher);
         showToast('👥 Návštěva zapsána · 300 Kč', 'success');
@@ -1559,16 +1592,18 @@ $('#ci-date').value = today();
 $('#catch-date').value = today();
 $('#visit-date').value = today();
 
-if (isAdminMode()) {
+var fisher = getLoggedInFisher();
+var lastView = null;
+try { lastView = localStorage.getItem(LS.LAST_VIEW); } catch (_) {}
+if (isAdminMode() && fisher && lastView === 'fisher') {
+    showFisherView(fisher);
+} else if (isAdminMode()) {
     showAdminView();
     renderFishers();
+} else if (fisher) {
+    showFisherView(fisher);
 } else {
-    var fisher = getLoggedInFisher();
-    if (fisher) {
-        showFisherView(fisher);
-    } else {
-        showLoginScreen();
-    }
+    showLoginScreen();
 }
 document.addEventListener('click', function(e) {
     if (e.target.closest && e.target.closest('#link-admin-logout')) {

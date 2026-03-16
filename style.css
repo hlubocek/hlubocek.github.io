@@ -443,17 +443,17 @@ main { max-width: 640px; margin: 0 auto; padding: 1rem; }
 }
 .modal-close:hover { background: var(--border); color: var(--text); }
 .podminky-body {
-    font-size: .9rem; line-height: 1.6; color: var(--text); max-height: 60vh; overflow-y: auto;
+    font-size: .9rem; line-height: 1.6; color: var(--text); max-height: 65vh; overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
-.podminky-pdf-link {
-    display: inline-flex; align-items: center; gap: .4rem;
-    padding: .6rem 1rem; margin-bottom: 1rem; background: var(--primary); color: #fff;
-    border-radius: var(--radius-sm); font-weight: 600; text-decoration: none; font-size: .95rem;
-}
-.podminky-pdf-link:hover { background: var(--primary-light); color: #fff; }
+.podminky-body h4 { font-size: 1rem; margin: 0 0 .75rem; color: var(--primary); }
+.podminky-body h5 { font-size: .92rem; margin: 1rem 0 .4rem; font-weight: 700; }
 .podminky-body p { margin-bottom: .75rem; }
 .podminky-body ul { margin: .5rem 0 .75rem 1.25rem; }
 .podminky-body li { margin-bottom: .35rem; }
+.podminky-footer { font-size: .85rem; color: var(--text-secondary); margin-top: 1.25rem; padding-top: .75rem; border-top: 1px solid var(--border-light); }
+.podminky-pdf-link-inline { color: var(--primary); font-weight: 600; text-decoration: underline; }
+.podminky-pdf-link-inline:hover { color: var(--primary-light); }
 
 /* ── FORMS ── */
 .form-group { margin-bottom: .9rem; }
