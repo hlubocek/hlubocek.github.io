@@ -1123,13 +1123,64 @@ function initYearSelectors() {
 // ════════════════════════════════════════
 // NASTAVENÍ
 // ════════════════════════════════════════
+function renderSettingsBiometric() {
+    var cont = $('#settings-biometric-content');
+    if (!cont) return;
+    if (!isWebAuthnSupported()) {
+        cont.innerHTML = '<p class="form-hint">Otisk / Face ID není v tomto prohlížeči podporován. Použijte Chrome, Safari nebo Edge na HTTPS.</p>';
+        return;
+    }
+    var creds = getWebauthnCredentials();
+    var fisher = getLoggedInFisher();
+    var adminHashes = getAdminPinHashes();
+    var adminFishers = fishers.filter(function(f) { return f.pinHash && adminHashes.indexOf(f.pinHash) >= 0; });
+    var targets = fisher ? [fisher] : adminFishers;
+    if (!targets.length) {
+        cont.innerHTML = '<p class="form-hint">Pro přidání otisku se odhlaste a přihlaste se svým 6místným PINem jako rybář (ne jako správce).</p>';
+        return;
+    }
+    var html = '';
+    targets.forEach(function(f) {
+        var hasCred = Object.keys(creds).some(function(cid) { return creds[cid] === f.id; });
+        html += '<div class="settings-biometric-item">';
+        html += '<span class="settings-biometric-name">' + esc(f.name) + '</span>';
+        if (hasCred) {
+            html += '<span class="form-hint" style="margin-right:.5rem;">✓ Otisk aktivní</span>';
+            html += '<button type="button" class="btn btn-secondary btn-sm" data-fisher-id="' + esc(f.id) + '" data-action="remove">Odstranit</button>';
+        } else {
+            html += '<button type="button" class="btn btn-primary btn-sm" data-fisher-id="' + esc(f.id) + '" data-action="add">Přidat otisk / Face ID</button>';
+        }
+        html += '</div>';
+    });
+    cont.innerHTML = html;
+    cont.querySelectorAll('[data-action="add"]').forEach(function(btn) {
+        btn.onclick = async function() {
+            var f = targets.find(function(t) { return t.id === btn.dataset.fisherId; });
+            await webauthnRegister(btn.dataset.fisherId, f ? f.name : '');
+            renderSettingsBiometric();
+        };
+    });
+    cont.querySelectorAll('[data-action="remove"]').forEach(function(btn) {
+        btn.onclick = function() {
+            if (!confirm('Odstranit otisk / Face ID?')) return;
+            removeWebauthnCredentialForFisher(btn.dataset.fisherId);
+            renderSettingsBiometric();
+            updateBiometricLoginVisibility();
+            showToast('Otisk odstraněn', 'success');
+        };
+    });
+}
+
 function openSettings() {
     $('#settings-firebase-url').value = localStorage.getItem(LS.FB_URL) || FB_CONFIG.databaseURL;
     $('#settings-firebase-key').value = localStorage.getItem(LS.FB_KEY) || FB_CONFIG.apiKey;
     $('#btn-disconnect-firebase').style.display = fbReady ? '' : 'none';
     var clearWrap = $('#settings-clear-data-wrap');
     if (clearWrap) clearWrap.style.display = (isAdminMode() && fbReady) ? 'block' : 'none';
+    var pinSection = $('#settings-pin-section');
+    if (pinSection) pinSection.style.display = isAdminMode() ? 'block' : 'none';
     renderAdminPinsList();
+    renderSettingsBiometric();
     updateFbStatusBox();
     openModal(modals.settings);
     var modalEl = modals.settings && modals.settings.querySelector('.modal');
@@ -1256,6 +1307,7 @@ function renderFisherProfile(fisher) {
         return '<div class="visit-row"><span>👤 ' + esc(v.visitorName) + '</span><span>' + fmtDate(v.date) + ' · ' + (v.fee || FEE_VISIT) + ' Kč</span></div>';
     }).join('') : '<p class="empty-hint">Zatím žádné návštěvy</p>';
 }
+$('#fisher-settings').addEventListener('click', openSettings);
 $('#fisher-logout').addEventListener('click', function() {
     try { localStorage.removeItem(LS.FISHER_ID); } catch (_) {}
     showLoginScreen();

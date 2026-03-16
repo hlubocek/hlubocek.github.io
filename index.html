@@ -262,6 +262,11 @@
                 <h3>⚙️ Nastavení</h3>
                 <button class="modal-close" id="modal-close-settings">&times;</button>
             </div>
+            <div class="settings-section" id="settings-biometric-section">
+                <h4>👆 Otisk / Face ID</h4>
+                <p class="settings-desc">Volitelný způsob přihlášení místo PINu. Funguje jen na HTTPS (hlubocek.github.io).</p>
+                <div id="settings-biometric-content"></div>
+            </div>
             <div class="settings-section settings-pin-section" id="settings-pin-section">
                 <h4>🔐 Správci (min. 2 pro zastupitelnost)</h4>
                 <p class="settings-desc">Přidejte PINy správců – každý s vlastním PINem se může přihlásit. Doporučeno min. 2 správce. Rybář může být i správce (přidejte jeho PIN). PIN 4–8 číslic.</p>
@@ -337,7 +342,10 @@
                 <h1>🎣 Hluboček</h1>
                 <p class="subtitle" id="fisher-profile-name">—</p>
             </div>
-            <button class="header-settings-btn" id="fisher-logout" title="Odhlásit">🚪</button>
+            <div class="fisher-header-btns">
+                <button class="header-settings-btn" id="fisher-settings" title="Nastavení">⚙️</button>
+                <button class="header-settings-btn" id="fisher-logout" title="Odhlásit">🚪</button>
+            </div>
         </header>
         <main class="fisher-main">
             <div class="fisher-actions-grid">

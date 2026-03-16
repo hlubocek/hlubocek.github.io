@@ -22,9 +22,14 @@
 .login-footer { font-size: .75rem; color: var(--text-secondary); margin-top: 1rem; opacity: .9; }
 .btn-biometric { font-size: .95rem; }
 .fisher-security-row { margin-top: 1rem; display: flex; flex-direction: column; gap: .5rem; }
+.settings-biometric-item { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; padding: .6rem 0; border-bottom: 1px solid var(--border-light); }
+.settings-biometric-item:last-child { border-bottom: none; }
+.settings-biometric-name { font-weight: 600; min-width: 120px; }
 
 /* ── FISHER PROFILE ── */
-.fisher-header { background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: #fff; padding: 1rem; }
+.fisher-header { background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: #fff; padding: 1rem; position: relative; }
+.fisher-header-btns { position: absolute; top: .75rem; right: .75rem; display: flex; gap: .35rem; }
+.fisher-header-btns .header-settings-btn { position: static; }
 .fisher-main { max-width: 640px; margin: 0 auto; padding: 1rem; padding-bottom: 2rem; }
 .fisher-actions-grid { display: grid; gap: .65rem; margin-bottom: 1.5rem; }
 .fisher-action-btn { padding: .9rem; font-size: 1rem; }
