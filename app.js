@@ -484,7 +484,13 @@ async function generateUniqueFisherPin() {
 // ════════════════════════════════════════
 // WEBAUTHN / BIOMETRIKA
 // ════════════════════════════════════════
+function isAndroidDevice() {
+    try { return /Android/i.test((navigator && navigator.userAgent) ? navigator.userAgent : ''); } catch (_) { return false; }
+}
 function isWebAuthnSupported() {
+    // Na některých Android zařízeních WebAuthn v kombinaci s mobilními prohlížeči/biometrikou zlobí.
+    // Raději biometrie na Androidu úplně vypneme, aby uživatel mohl vždy použít PIN.
+    if (isAndroidDevice()) return false;
     return !!(window.PublicKeyCredential && window.crypto && window.crypto.subtle);
 }
 function getRpId() {
