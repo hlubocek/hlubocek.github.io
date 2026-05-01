@@ -26,7 +26,7 @@
             <div class="login-icon">🎣</div>
             <h1>Hluboček</h1>
             <p class="login-subtitle">Evidence rybolovu</p>
-            <p class="login-hint">Zadejte PIN (rybář 6 číslic, správce 4–8)</p>
+            <p class="login-hint">Zadejte PIN (držitel povolenky: 6 číslic, správce: 4–8)</p>
             <form id="login-form" novalidate>
                 <input type="password" id="login-pin" inputmode="numeric" maxlength="8" placeholder="••••••" autocomplete="off" autofocus>
                 <button type="submit" class="btn btn-primary btn-full" id="login-submit">Přihlásit</button>
@@ -36,40 +36,40 @@
         </div>
     </div>
 
-    <!-- MODAL: Volba režimu (správce vs rybář) -->
+    <!-- MODAL: Volba režimu (správce vs držitel povolenky) -->
     <div id="modal-login-choice" class="modal-overlay">
         <div class="modal">
             <div class="modal-header">
-                <h3>🔐 Přihlásit jako</h3>
+                <h3>🔐 Zvolte režim</h3>
                 <button class="modal-close" id="modal-close-login-choice">&times;</button>
             </div>
             <p class="login-choice-desc">Váš PIN platí pro oba režimy. Vyberte:</p>
             <div class="login-choice-btns">
-                <button type="button" class="btn btn-primary btn-full" id="login-choice-admin">👤 Správce (evidence, úlovky, držitelé)</button>
-                <button type="button" class="btn btn-secondary btn-full" id="login-choice-fisher">🎣 Rybář (můj profil, příchody, úlovky)</button>
+                <button type="button" class="btn btn-primary btn-full" id="login-choice-admin">👤 Správce (evidence, úlovky, seznam držitelů)</button>
+                <button type="button" class="btn btn-secondary btn-full" id="login-choice-fisher">🎣 Držitel povolenky (profil, příchody, úlovky)</button>
             </div>
         </div>
     </div>
 
-    <!-- MODAL: Výběr profilu rybáře (více admin-rybářů) -->
+    <!-- MODAL: Výběr profilu držitele (více účtů správce) -->
     <div id="modal-pick-fisher" class="modal-overlay">
         <div class="modal">
             <div class="modal-header">
                 <h3>Přepnout na profil</h3>
                 <button class="modal-close" id="modal-close-pick-fisher">&times;</button>
             </div>
-            <p class="form-hint">Vyberte profil rybáře:</p>
+            <p class="form-hint">Vyberte profil:</p>
             <div id="pick-fisher-list" class="pick-fisher-list"></div>
         </div>
     </div>
 
-    <!-- HLAVNÍ APLIKACE (admin nebo rybář – skryto do přihlášení) -->
+    <!-- HLAVNÍ APLIKACE (správce nebo držitel povolenky – skryto do přihlášení) -->
     <div id="app-wrapper" style="display:none;">
 
     <header>
         <div class="header-content">
             <h1>🎣 Hluboček</h1>
-            <p class="subtitle">Evidence rybolovu · Kapr 45–60 cm (přisvojení dle řádu)</p>
+            <p class="subtitle">Evidence rybolovu · Úlovky: kapr, amur, lín (délky dle řádu)</p>
             <a href="#" class="header-link" id="btn-podminky">Rybářský řád</a>
         </div>
         <button class="header-settings-btn" id="btn-open-settings" title="Nastavení">⚙️</button>
@@ -107,15 +107,15 @@
 
     <main id="app">
 
-        <!-- RYBÁŘI -->
+        <!-- DRŽITELÉ POVOLENKY -->
         <section id="view-rybari" class="view active">
             <div class="section-header">
                 <h2>Držitelé povolenky</h2>
                 <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">
                     <button class="btn btn-secondary btn-sm" id="btn-app-qr">📱 QR odkaz na aplikaci</button>
-                    <button class="btn btn-primary" id="btn-new-fisher">+ Přidat rybáře</button>
+                    <button class="btn btn-primary" id="btn-new-fisher">+ Přidat držitele povolenky</button>
                     <a href="#" id="link-switch-to-fisher" class="admin-switch-link" style="display:none">Přepnout na můj profil</a>
-                    <a href="#" id="link-admin-logout" class="admin-logout" style="display:none">Odhlásit správce</a>
+                    <a href="#" id="link-admin-logout" class="admin-logout" style="display:none">Konec režimu správce</a>
                 </div>
             </div>
             <p id="admin-hint" class="admin-hint" style="display:none"></p>
@@ -123,7 +123,7 @@
             <div id="no-fishers" class="empty-state">
                 <span class="empty-icon">👤</span>
                 <p>Zatím nejsou přidáni žádní držitelé povolenky.</p>
-                <p class="hint">Nové přidejte po zaplacení povolenky přes tlačítko „+ Přidat rybáře“. Každý dostane 6místný PIN pro přihlášení.</p>
+                <p class="hint">Po zaplacení povolenky přidejte záznam tlačítkem „+ Přidat držitele povolenky“. K záznamu se vygeneruje 6místný PIN k přihlášení.</p>
             </div>
         </section>
 
@@ -165,14 +165,18 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="catch-length">Délka kapra (cm)</label>
+                    <label for="catch-species">Druh ryby</label>
+                    <select id="catch-species"></select>
+                </div>
+                <div class="form-group">
+                    <label for="catch-length">Délka (cm)</label>
                     <input type="number" id="catch-length" min="10" max="120" placeholder="např. 52">
                     <span class="form-hint" id="catch-length-hint"></span>
                 </div>
-                <div style="display:block;width:100%;margin-bottom:.9rem;padding:.75rem;background:#f8faf8;border:1.5px solid #d4ddd7;border-radius:8px;">
+                <div id="catch-kept-row" style="display:block;width:100%;margin-bottom:.9rem;padding:.75rem;background:#f8faf8;border:1.5px solid #d4ddd7;border-radius:8px;">
                     <label style="display:flex;align-items:center;gap:.75rem;font-size:1rem;font-weight:500;cursor:pointer;user-select:none;">
                         <input type="checkbox" id="catch-kept" style="width:24px;height:24px;accent-color:#1a6b3c;cursor:pointer;flex-shrink:0;">
-                        <span>Vzal rybu domů</span>
+                        <span>Odnést rybu domů</span>
                     </label>
                 </div>
                 <button class="btn btn-primary btn-full" id="btn-catch-submit">🐟 Zapsat úlovek</button>
@@ -188,7 +192,7 @@
             <div class="inline-form">
                 <div class="form-row-2">
                     <div class="form-group">
-                        <label for="visit-fisher">Hostitel (držitel povolenky, kdo pozval)</label>
+                        <label for="visit-fisher">Držitel povolenky (kdo zve návštěvu)</label>
                         <select id="visit-fisher"></select>
                     </div>
                     <div class="form-group">
@@ -198,9 +202,9 @@
                 </div>
                 <div class="form-group">
                     <label for="visit-name">Jméno návštěvy</label>
-                    <input type="text" id="visit-name" placeholder="Jméno hosta">
+                    <input type="text" id="visit-name" placeholder="Jméno návštěvníka">
                 </div>
-                <p class="form-hint visit-fee-note">Podle řádu: poplatek <strong>300 Kč / 24 h lovu</strong>. Návštěva hradí hostiteli, hostitel jej neprodleně předá správci rybníka. Návštěva si <strong>nesmí přisvojit žádnou rybu</strong>.</p>
+                <p class="form-hint visit-fee-note">Podle řádu: poplatek <strong>300 Kč / 24 h lovu</strong>. Poplatek hradí návštěva osobě, která ji na lov pozvala; tato osoba jej neprodleně předá správci rybníka. Návštěva si <strong>nesmí přisvojit žádnou rybu</strong>.</p>
                 <button class="btn btn-primary btn-full" id="btn-visit-submit">👥 Zapsat návštěvu</button>
             </div>
             <div id="navstevy-content"></div>
@@ -227,7 +231,7 @@
             <form id="fisher-form">
                 <div class="form-group">
                     <label for="fisher-name">Jméno a příjmení</label>
-                    <input type="text" id="fisher-name" placeholder="Jan Novák" required>
+                    <input type="text" id="fisher-name" placeholder="např. Jana Nováková" required>
                 </div>
                 <div class="form-group">
                     <label for="fisher-number">Číslo rybářského lístku</label>
@@ -238,12 +242,12 @@
                     <input type="tel" id="fisher-phone" placeholder="+420 123 456 789">
                 </div>
                 <div class="form-group fisher-pin-row">
-                    <label for="fisher-pin">PIN rybáře (6 číslic)</label>
+                    <label for="fisher-pin">PIN držitele (6 číslic)</label>
                     <div style="display:flex;gap:.5rem;align-items:center;">
                         <input type="text" id="fisher-pin" inputmode="numeric" maxlength="6" placeholder="123456" pattern="[0-9]{6}">
                         <button type="button" class="btn btn-secondary" id="fisher-gen-pin">Vygenerovat</button>
                     </div>
-                    <span class="form-hint" id="fisher-pin-hint">Předáte rybáři – slouží k přihlášení. Unikátní mezi rybáři. Rybář může být i správce (stejný PIN).</span>
+                    <span class="form-hint" id="fisher-pin-hint">Předejte osobě s povolenkou – slouží k přihlášení. Unikátní mezi držiteli. Stejný PIN může sloužit i pro režim správce.</span>
                 </div>
                 <button type="submit" class="btn btn-primary btn-full">Uložit</button>
             </form>
@@ -259,7 +263,7 @@
             </div>
             <div class="qr-body">
                 <p style="font-size:.85rem;color:var(--text-secondary);margin-bottom:.75rem;text-align:center;">
-                    Vyvěste u rybníka. Rybář naskenuje, otevře aplikaci a přihlásí se svým 6místným PINem.
+                    Vyvěste u rybníka. Držitel povolenky naskenuje kód, otevře aplikaci a přihlásí se 6místným PINem.
                 </p>
                 <div id="qr-canvas-wrap" style="display:flex;justify-content:center;"></div>
             </div>
@@ -278,7 +282,7 @@
                     <label for="admin-pin-input">Zadejte PIN správce</label>
                     <input type="password" id="admin-pin-input" inputmode="numeric" minlength="4" maxlength="8" placeholder="4–8 číslic" autocomplete="off">
                 </div>
-                <button type="button" id="admin-pin-submit" class="btn btn-primary btn-full">Přihlásit jako správce</button>
+                <button type="button" id="admin-pin-submit" class="btn btn-primary btn-full">Přihlásit do režimu správce</button>
             </form>
         </div>
     </div>
@@ -297,11 +301,11 @@
             </div>
             <div class="settings-section settings-pin-section" id="settings-pin-section">
                 <h4>🔐 Správci (min. 2 pro zastupitelnost)</h4>
-                <p class="settings-desc">Přidejte PINy správců – každý s vlastním PINem se může přihlásit. Doporučeno min. 2 správce. Rybář může být i správce (přidejte jeho PIN). PIN 4–8 číslic.</p>
+                <p class="settings-desc">Přidejte správcovské PINy – každý umožní přihlášení do režimu správce. Doporučeno min. 2 pro zastupitelnost. Stejný PIN může mít i držitel povolenky (zadejte ho zde). Délka 4–8 číslic.</p>
                 <div id="admin-pins-list" class="admin-pins-list"></div>
                 <div class="form-group">
-                    <label for="settings-admin-name">Jméno správce</label>
-                    <input type="text" id="settings-admin-name" placeholder="Jan Novák">
+                    <label for="settings-admin-name">Jméno u správcovského PINu (volitelné)</label>
+                    <input type="text" id="settings-admin-name" placeholder="např. správa">
                 </div>
                 <div class="form-group">
                     <label for="settings-pin-new">PIN správce</label>
@@ -315,7 +319,7 @@
             </div>
             <div class="settings-section">
                 <h4>🔥 Firebase – sdílení dat</h4>
-                <p class="settings-desc">Bez Firebase jsou data jen v tomto prohlížeči. Firebase = <strong>všichni mají stejná data</strong> v reálném čase. Pokud připojení nefunguje, v Firebase Console nastavte pravidla (Rules) – viz soubor FIREBASE-SETUP.md v projektu.</p>
+                <p class="settings-desc">Bez Firebase jsou data jen v tomto prohlížeči. S Firebase jsou <strong>stejná data u všech zařízení</strong> v reálném čase. Pokud připojení nefunguje, v Firebase Console nastavte pravidla (Rules) – viz soubor FIREBASE-SETUP.md v projektu.</p>
                 <div id="firebase-status" class="firebase-status-box"></div>
                 <div class="form-group">
                     <label for="settings-firebase-url">Database URL</label>
@@ -330,8 +334,8 @@
             </div>
             <div class="settings-section settings-danger-section" id="settings-clear-data-wrap" style="display:none;">
                 <h4>🗑 Vymazat všechna data</h4>
-                <p class="settings-desc">Smaze všechny rybáře, úlovky, docházku a návštěvy z databáze. PIN a nastavení zůstanou. Pouze pro správce.</p>
-                <button type="button" class="btn btn-danger btn-full" id="btn-clear-all-data">Smazat rybáře a úlovky (všechna data)</button>
+                <p class="settings-desc">Smaže z databáze všechny záznamy držitelů, úlovky, docházku a návštěvy. PIN a nastavení zůstanou. Pouze pro správce.</p>
+                <button type="button" class="btn btn-danger btn-full" id="btn-clear-all-data">Smazat všechna data (držitelé, úlovky, …)</button>
             </div>
         </div>
     </div>
@@ -350,13 +354,13 @@
             </div>
             <div class="podminky-body">
                 <p>Rybolov na rybníku Hluboček se řídí <strong>rybářským řádem místního rybářského spolku</strong>. Všechna závazná pravidla jsou v dokumentu níže.</p>
-                <p>Tato aplikace slouží k evidenci členů, docházky, úlovků a návštěv v souladu s tímto řádem.</p>
+                <p>Tato aplikace slouží k evidenci držitelů povolenky, docházky, úlovků a návštěv v souladu s tímto řádem.</p>
                 <p class="podminky-footer"><a href="Rybarsky-rad-Hlubocek.pdf" target="_blank" rel="noopener" class="podminky-pdf-link-inline">Otevřít / stáhnout celý rybářský řád (PDF)</a></p>
             </div>
         </div>
     </div>
 
-    <!-- PROFIL RYBÁŘE (přihlášen jako rybář) -->
+    <!-- PROFIL DRŽITELE POVOLENKY -->
     <div id="fisher-profile" style="display:none;">
         <header class="fisher-header">
             <div class="header-content">
@@ -364,7 +368,7 @@
                 <p class="subtitle" id="fisher-profile-name">—</p>
             </div>
             <div class="fisher-header-btns">
-                <button class="header-settings-btn" id="fisher-switch-admin" title="Přepnout na správce" style="display:none">👤</button>
+                <button class="header-settings-btn" id="fisher-switch-admin" title="Přepnout do režimu správce" style="display:none">👤</button>
                 <button class="header-settings-btn" id="fisher-settings" title="Nastavení">⚙️</button>
                 <button class="header-settings-btn" id="fisher-logout" title="Odhlásit">🚪</button>
             </div>
@@ -376,20 +380,20 @@
                 <button class="btn btn-secondary fisher-action-btn" id="fisher-btn-visit">👥 Zapsat návštěvu</button>
             </div>
             <div class="fisher-section">
-                <h3>Moje příchody</h3>
+                <h3>Příchody</h3>
                 <div id="fisher-my-checkins"></div>
             </div>
             <div class="fisher-section">
-                <h3>Moje úlovky</h3>
+                <h3>Úlovky</h3>
                 <div id="fisher-my-catches"></div>
             </div>
             <div class="fisher-section">
-                <h3>Moje návštěvy</h3>
+                <h3>Návštěvy</h3>
                 <div id="fisher-my-visitors"></div>
             </div>
             <a href="#" id="btn-podminky-fisher" class="fisher-link">Rybářský řád</a>
             <div class="fisher-security-row">
-                <button class="btn btn-secondary btn-full" id="fisher-btn-switch-admin" style="display:none;margin-bottom:.5rem;">👤 Přepnout na správce</button>
+                <button class="btn btn-secondary btn-full" id="fisher-btn-switch-admin" style="display:none;margin-bottom:.5rem;">👤 Režim správce</button>
                 <button class="btn btn-secondary btn-full" id="fisher-btn-change-pin">Změnit PIN</button>
                 <button class="btn btn-secondary btn-full" id="fisher-btn-add-biometric" style="display:none;margin-top:.5rem;">👆 Přidat otisk / Face ID</button>
                 <button class="btn btn-secondary btn-full btn-outline" id="fisher-btn-remove-biometric" style="display:none;margin-top:.5rem;">Odstranit otisk / Face ID</button>
@@ -397,7 +401,7 @@
         </main>
     </div>
 
-    <!-- MODAL: Změna PINu rybáře -->
+    <!-- MODAL: Změna PINu držitele -->
     <div id="modal-fisher-change-pin" class="modal-overlay">
         <div class="modal">
             <div class="modal-header">
@@ -413,13 +417,13 @@
                     <label for="fisher-pin-confirm">Potvrdit PIN</label>
                     <input type="password" id="fisher-pin-confirm" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="new-password">
                 </div>
-                <span class="form-hint" id="fisher-pin-change-hint">PIN musí být unikátní mezi rybáři. Stejný PIN může mít i správce.</span>
+                <span class="form-hint" id="fisher-pin-change-hint">PIN musí zůstat unikátní mezi držiteli povolenky. Stejný PIN může mít i správcovský účet.</span>
                 <button type="submit" class="btn btn-primary btn-full" style="margin-top:.75rem;">Uložit nový PIN</button>
             </form>
         </div>
     </div>
 
-    <!-- MODAL: Rybář – zapsat úlovek -->
+    <!-- MODAL: Držitel – zapsat úlovek -->
     <div id="modal-fisher-catch" class="modal-overlay">
         <div class="modal">
             <div class="modal-header">
@@ -428,19 +432,25 @@
             </div>
             <form id="fisher-catch-form">
                 <div class="form-group">
-                    <label for="fisher-catch-length">Délka kapra (cm)</label>
+                    <label for="fisher-catch-species">Druh ryby</label>
+                    <select id="fisher-catch-species"></select>
+                </div>
+                <div class="form-group">
+                    <label for="fisher-catch-length">Délka (cm)</label>
                     <input type="number" id="fisher-catch-length" min="10" max="120" placeholder="např. 52">
                     <span class="form-hint" id="fisher-catch-length-hint"></span>
                 </div>
-                <label class="check-label" style="display:flex;align-items:center;gap:.75rem;margin-bottom:.9rem;">
-                    <input type="checkbox" id="fisher-catch-kept"> Vzal rybu domů
-                </label>
+                <div id="fisher-catch-kept-row" style="display:block;margin-bottom:.9rem;padding:.75rem;background:#f8faf8;border:1.5px solid #d4ddd7;border-radius:8px;">
+                    <label class="check-label" style="display:flex;align-items:center;gap:.75rem;margin:0;cursor:pointer;user-select:none;">
+                        <input type="checkbox" id="fisher-catch-kept" style="width:24px;height:24px;accent-color:#1a6b3c;cursor:pointer;flex-shrink:0;"> Odnést rybu domů
+                    </label>
+                </div>
                 <button type="submit" class="btn btn-primary btn-full">Zapsat</button>
             </form>
         </div>
     </div>
 
-    <!-- MODAL: Rybář – zapsat návštěvu -->
+    <!-- MODAL: Držitel – zapsat návštěvu -->
     <div id="modal-fisher-visit" class="modal-overlay">
         <div class="modal">
             <div class="modal-header">
@@ -450,7 +460,7 @@
             <form id="fisher-visit-form">
                 <div class="form-group">
                     <label for="fisher-visit-name">Jméno návštěvy</label>
-                    <input type="text" id="fisher-visit-name" placeholder="Jméno hosta">
+                    <input type="text" id="fisher-visit-name" placeholder="Jméno návštěvníka">
                 </div>
                 <p class="form-hint">Poplatek 300 Kč / 24 h. Návštěva si nesmí přisvojit rybu.</p>
                 <button type="submit" class="btn btn-primary btn-full">Zapsat</button>

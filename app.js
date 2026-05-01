@@ -5,14 +5,35 @@
 // KONFIGURACE
 // ════════════════════════════════════════
 const LOCATION  = 'Hluboček';
-const SPECIES   = 'Kapr';
-const MIN_LEN   = 45;
-const MAX_LEN   = 60;
+/** Úlovky – druh ryby a rozmezí délky pro „v normě“ (upravte dle řádu u rybníka). */
+const CATCH_SPECIES = [
+    { id: 'Kapr', label: 'Kapr', minLen: 45, maxLen: 60, allowKept: true  },
+    { id: 'Amur', label: 'Amur', minLen: 45, maxLen: 60, allowKept: false },
+    { id: 'Lín',  label: 'Lín',  minLen: 45, maxLen: 60, allowKept: false }
+];
+function getCatchSpeciesMeta(speciesId) {
+    var id = speciesId || 'Kapr';
+    for (var i = 0; i < CATCH_SPECIES.length; i++) {
+        if (CATCH_SPECIES[i].id === id) return CATCH_SPECIES[i];
+    }
+    return CATCH_SPECIES[0];
+}
+function catchLengthInRange(length, speciesId) {
+    var m = getCatchSpeciesMeta(speciesId);
+    return length >= m.minLen && length <= m.maxLen;
+}
+/** Lze zaznamenat odnětí ryby domů (u amura a lína jen evidence míry, bez odnesení). */
+function catchSpeciesAllowsKept(speciesId) {
+    return getCatchSpeciesMeta(speciesId).allowKept === true;
+}
+function isCatchKeptDisplayed(cat) {
+    return !!(cat && cat.kept && catchSpeciesAllowsKept(cat.species));
+}
 const FEE_VISIT = 300;  // poplatek za návštěvu / 24 h (dle řádu; návštěva si nesmí přisvojit rybu)
 
 const BASE_URL  = 'https://hlubocek.github.io';
 
-// Výchozí Firebase – databáze hlubocek (všichni uživatelé se k ní automaticky připojí).
+// Výchozí Firebase – databáze hlubocek (uživatelé se k ní standardně připojí).
 const FB_CONFIG = {
     apiKey:      'AIzaSyBjFVu6IoWeEQOv1vevEKctAlMOMgAoc2E',
     databaseURL: 'https://hlubocek-default-rtdb.europe-west1.firebasedatabase.app',
@@ -107,7 +128,7 @@ function setupListeners() {
         activity = activity.filter(function(a) { return a.type === 'registration'; }).sort(function(a, b) { return (b.at || '').localeCompare(a.at || ''); });
         rerender();
     });
-    // Okamžité načtení všech dat (rybáři, úlovky, docházka, návštěvy, admin PINy) – spolehlivé na všech zařízeních
+    // Okamžité načtení všech dat (držitelé, úlovky, docházka, návštěvy, admin PINy) – spolehlivé na všech zařízeních
     Promise.all([
         db.ref('fishers').once('value'),
         db.ref('checkins').once('value'),
@@ -142,7 +163,7 @@ function refetchFishersFromFirebase() {
         lsSave(LS.FISHERS, fishers);
         updateSyncBar();
         rerender();
-        showToast(fishers.length ? 'Data načtena (' + fishers.length + ' držitelů)' : 'V databázi zatím nikdo není', 'success');
+        showToast(fishers.length ? 'Data načtena (' + fishers.length + ' v evidenci)' : 'V databázi zatím nikdo není', 'success');
     }).catch(function(e) {
         showToast('Nepodařilo se načíst data', 'danger');
     });
@@ -171,7 +192,7 @@ function refetchAllFromFirebase() {
 function dedupeCatches(arr) {
     var seen = new Set();
     return arr.filter(function(c) {
-        var key = (c.fisherId || '') + '|' + (c.date || '') + '|' + (c.length || '') + '|' + (c.kept ? '1' : '0');
+        var key = (c.fisherId || '') + '|' + (c.date || '') + '|' + (c.length || '') + '|' + (c.kept ? '1' : '0') + '|' + (c.species || 'Kapr');
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -314,7 +335,7 @@ async function doAdminLogin() {
         closeModal(modals.adminPin);
         if (pinEl) pinEl.value = '';
         renderFishers();
-        showToast('Přihlášen jako správce', 'success');
+        showToast('Přihlášení: režim správce', 'success');
     } catch (err) {
         console.error(err);
         showToast('Chyba při ověření PINu. Zkuste obnovit stránku.', 'danger');
@@ -342,12 +363,68 @@ $('#btn-save-pin')?.addEventListener('click', async () => {
     $('#settings-admin-name').value = '';
     $('#settings-pin-new').value = '';
     $('#settings-pin-confirm').value = '';
-    showToast(fbReady ? 'Správce přidán (platí všude)' : 'Správce přidán', 'success');
+    showToast(fbReady ? 'PIN správce uložen (platí všude)' : 'PIN správce uložen', 'success');
     renderAdminPinsList();
 });
 
 // ── Helpers ──
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function initCatchSpeciesSelects() {
+    var html = CATCH_SPECIES.map(function(s) {
+        return '<option value="' + esc(s.id) + '">' + esc(s.label) + '</option>';
+    }).join('');
+    var a = $('#catch-species');
+    var b = $('#fisher-catch-species');
+    if (a) a.innerHTML = html;
+    if (b) b.innerHTML = html;
+}
+function refreshCatchLengthHint(lengthEl, hintEl, speciesEl) {
+    if (!lengthEl || !hintEl) return;
+    var speciesId = speciesEl && speciesEl.value ? speciesEl.value : CATCH_SPECIES[0].id;
+    var meta = getCatchSpeciesMeta(speciesId);
+    var val = parseInt(lengthEl.value, 10);
+    if (!val) { hintEl.textContent = ''; hintEl.className = 'form-hint'; return; }
+    if (val >= meta.minLen && val <= meta.maxLen) {
+        hintEl.className = 'form-hint hint-ok';
+        hintEl.textContent = '✓ V normě (' + meta.minLen + '–' + meta.maxLen + ' cm)';
+    } else {
+        hintEl.className = 'form-hint hint-outside';
+        hintEl.textContent = '⚠ Mimo normu (' + meta.minLen + '–' + meta.maxLen + ' cm)';
+    }
+}
+function syncAdminCatchKeptRow() {
+    var row = $('#catch-kept-row');
+    var spec = $('#catch-species');
+    var cb = $('#catch-kept');
+    if (!row) return;
+    var sid = spec && spec.value ? spec.value : CATCH_SPECIES[0].id;
+    row.style.display = catchSpeciesAllowsKept(sid) ? '' : 'none';
+    if (!catchSpeciesAllowsKept(sid) && cb) cb.checked = false;
+}
+function syncFisherCatchKeptRow() {
+    var row = $('#fisher-catch-kept-row');
+    var spec = $('#fisher-catch-species');
+    var cb = $('#fisher-catch-kept');
+    if (!row) return;
+    var sid = spec && spec.value ? spec.value : CATCH_SPECIES[0].id;
+    row.style.display = catchSpeciesAllowsKept(sid) ? '' : 'none';
+    if (!catchSpeciesAllowsKept(sid) && cb) cb.checked = false;
+}
+function bindCatchLengthSpeciesHints(lengthId, hintId, speciesId, onSpeciesChange) {
+    var len = $(lengthId);
+    var hint = $(hintId);
+    var spec = speciesId ? $(speciesId) : null;
+    if (!len || !hint) return;
+    function upd() { refreshCatchLengthHint(len, hint, spec); }
+    len.addEventListener('input', upd);
+    if (spec) {
+        spec.addEventListener('change', function() {
+            upd();
+            if (onSpeciesChange) onSpeciesChange();
+        });
+    }
+}
 function today()          { return new Date().toISOString().split('T')[0]; }
 function fmtDate(ds)      { return new Date(ds+'T12:00:00').toLocaleDateString('cs-CZ', { day:'numeric', month:'long', year:'numeric' }); }
 function fmtTime(ts)      { return new Date(ts).toLocaleTimeString('cs-CZ', { hour:'2-digit', minute:'2-digit' }); }
@@ -580,7 +657,7 @@ async function webauthnRegister(fisherId, fisherName) {
         addWebauthnCredential(cred.id, fisherId);
         updateBiometricLoginVisibility();
         updateFisherBiometricButtons(fishers.find(function(f) { return f.id === fisherId; }));
-        showToast('Otisk / Face ID přidán', 'success');
+        showToast('Otisk / Face ID uložen', 'success');
     } catch (err) {
         console.error('WebAuthn register:', err);
         if (err.name === 'NotAllowedError') showToast('Registrace zrušena nebo čas vypršel', 'warning');
@@ -617,7 +694,7 @@ async function webauthnAuthenticate() {
         if (!fisherId) throw new Error('Neznámý přihlašovací identifikátor');
         var fisher = fishers.find(function(f) { return f.id === fisherId; });
         if (!fisher) {
-            showToast('Držitel povolenky nenalezen', 'danger');
+            showToast('Profil nenalezen', 'danger');
             return;
         }
         try { localStorage.removeItem(LS.FISHER_ID); } catch (_) {}
@@ -636,7 +713,7 @@ function updateSyncBar() {
     if (fbReady) {
         bar.className = 'sync-bar sync-firebase';
         icon.textContent = '🔥';
-        text.textContent = 'Firebase – data sdílena v reálném čase' + (fishers.length ? ' (' + fishers.length + ' držitelů)' : '');
+        text.textContent = 'Firebase – data sdílena v reálném čase' + (fishers.length ? ' (' + fishers.length + ' v evidenci)' : '');
         btn.style.display = 'none';
         if (refreshWrap) { refreshWrap.style.display = ''; refreshWrap.innerHTML = '<a href="#" id="sync-refresh-link">Obnovit</a>'; }
         var refLink = $('#sync-refresh-link');
@@ -656,7 +733,7 @@ function makeQr(container, url, size) {
     new QRCode(container, { text: url, width: size||260, height: size||260, colorDark: '#1a2e1f', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
 }
 
-// ── Naplnit všechny select rybářů ──
+// ── Naplnit všechny select držitelů povolenky ──
 function populateFisherSelects() {
     const sorted = [...fishers].sort((a,b) => a.name.localeCompare(b.name, 'cs'));
     const opts   = sorted.map(f => `<option value="${f.id}">${esc(f.name)}</option>`).join('');
@@ -717,7 +794,7 @@ $('#btn-new-fisher').addEventListener('click', async () => {
     $('#modal-fisher-title').textContent = 'Nový držitel povolenky';
     $('#fisher-form').reset();
     $('#fisher-pin').value = await generateUniqueFisherPin();
-    $('#fisher-pin-hint').textContent = 'Předáte rybáři – slouží k přihlášení. Musí být unikátní.';
+    $('#fisher-pin-hint').textContent = 'Předejte osobě s povolenkou – slouží k přihlášení. Musí být unikátní.';
     openModal(modals.fisher);
 });
 
@@ -751,7 +828,7 @@ $('#fisher-form').addEventListener('submit', async function(e) {
     if (!pin) pin = existing.pinDisplay;
     var used = pin ? await isPinUsedByOther(pin, editingFisherId || null) : false;
     if (pin && used) {
-        showToast('Tento PIN už používá jiný rybář', 'danger');
+        showToast('Tento PIN už patří k jinému záznamu', 'danger');
         return;
     }
     var pinHash = pin ? await hashPin(pin) : existing.pinHash;
@@ -771,7 +848,7 @@ $('#fisher-form').addEventListener('submit', async function(e) {
         renderFishers();
         populateFisherSelects();
         closeModal(modals.fisher);
-        showToast(editingFisherId ? 'Držitel povolenky upraven' : (name + ' přidán · PIN: ' + pin));
+        showToast(editingFisherId ? 'Údaje uloženy' : ('Záznam vytvořen: ' + name + ' · PIN: ' + pin));
     } catch (err) {
         console.error('Uložení držitele selhalo:', err);
         showToast('Nepodařilo se uložit. Zkontrolujte připojení.', 'danger');
@@ -805,7 +882,7 @@ function renderFishers() {
             var refBtn = $('#btn-refresh-fishers');
             if (refBtn) refBtn.onclick = refetchFishersFromFirebase;
         } else {
-            empty.innerHTML = '<span class="empty-icon">👤</span><p>Zatím nejsou přidáni žádní držitelé povolenky.</p><p class="hint">Nové přidejte přes tlačítko „📱 QR registrace“ (vyvěste QR u rybníka) nebo otevřete aplikaci jako správce.</p>';
+            empty.innerHTML = '<span class="empty-icon">👤</span><p>Zatím nejsou přidáni žádní držitelé povolenky.</p><p class="hint">Nové přidejte přes tlačítko „📱 QR odkaz na aplikaci“ (vyvěste QR u rybníka) nebo otevřete aplikaci v režimu správce.</p>';
         }
         return;
     }
@@ -845,7 +922,7 @@ window._editFisher = function(id) {
 
 window._deleteFisher = async function(id) {
     var f = fishers.find(function(x) { return x.id === id; });
-    if (!f || !confirm('Smazat držitele povolenky ' + f.name + ' včetně všech záznamů?')) return;
+    if (!f || !confirm('Odstranit záznam držitele povolenky ' + f.name + ' včetně všech dat u této osoby?')) return;
     try {
         removeWebauthnCredentialForFisher(id);
         await dbRemove('fishers', id);
@@ -866,10 +943,10 @@ window._deleteFisher = async function(id) {
         populateFisherSelects();
         if (currentView === 'navstevy') renderNavstevy();
         if (currentView === 'statistiky') renderStatistiky();
-        showToast('Držitel povolenky smazán');
+        showToast('Záznam odstraněn');
     } catch (err) {
         console.error(err);
-        showToast('Nepodařilo se smazat držitele povolenky', 'danger');
+        showToast('Nepodařilo se odstranit záznam', 'danger');
     }
 };
 
@@ -879,17 +956,17 @@ window._deleteFisher = async function(id) {
 $('#btn-ci-submit').addEventListener('click', async function() {
     var fid  = $('#ci-fisher').value;
     var date = $('#ci-date').value;
-    if (!fid)  { showToast('Nejdříve přidejte držitele povolenky', 'warning'); return; }
+    if (!fid)  { showToast('Nejdříve přidejte osobu s povolenkou', 'warning'); return; }
     if (!date) { showToast('Vyberte datum', 'warning'); return; }
     var already = checkins.find(function(c) { return c.fisherId === fid && c.date === date; });
-    if (already) { showToast('Tento držitel povolenky je na tento den již evidován', 'warning'); return; }
+    if (already) { showToast('Pro tento den je u této osoby příchod už zapsaný', 'warning'); return; }
     var id = genId();
     var ci = { id: id, fisherId: fid, date: date, timestamp: new Date().toISOString() };
     try {
         await dbSet('checkins', id, ci);
         if (!fbReady) { checkins.push(ci); lsSave(LS.CHECKINS, checkins); }
         renderDochazka();
-        showToast('✓ Příchod zapsán', 'success');
+        showToast('✓ Příchod uložen', 'success');
     } catch (err) {
         console.error(err);
         showToast('Nepodařilo se zapsat příchod', 'danger');
@@ -930,7 +1007,7 @@ window._deleteCheckin = async function(id) {
         checkins = checkins.filter(function(c) { return c.id !== id; });
         lsSave(LS.CHECKINS, checkins);
         renderDochazka();
-        showToast('Záznam smazán');
+        showToast('Položka odstraněna');
     } catch (err) {
         console.error(err);
         showToast('Nepodařilo se smazat', 'danger');
@@ -940,31 +1017,21 @@ window._deleteCheckin = async function(id) {
 // ════════════════════════════════════════
 // ÚLOVKY
 // ════════════════════════════════════════
-$('#catch-length').addEventListener('input', () => {
-    const val  = parseInt($('#catch-length').value);
-    const hint = $('#catch-length-hint');
-    if (!val) { hint.textContent = ''; hint.className = 'form-hint'; return; }
-    if (val >= MIN_LEN && val <= MAX_LEN) {
-        hint.className = 'form-hint hint-ok';
-        hint.textContent = `✓ V normě (${MIN_LEN}–${MAX_LEN} cm)`;
-    } else {
-        hint.className = 'form-hint hint-outside';
-        hint.textContent = `⚠ Mimo normu (${MIN_LEN}–${MAX_LEN} cm)`;
-    }
-});
 
 $('#btn-catch-submit').addEventListener('click', async function() {
     var fid    = $('#catch-fisher').value;
     var date   = $('#catch-date').value;
+    var speciesId = $('#catch-species').value || CATCH_SPECIES[0].id;
     var length = parseInt($('#catch-length').value, 10);
-    var kept   = $('#catch-kept').checked;
-    if (!fid)                              { showToast('Nejdříve přidejte držitele povolenky', 'warning'); return; }
+    var meta   = getCatchSpeciesMeta(speciesId);
+    var kept   = catchSpeciesAllowsKept(meta.id) ? $('#catch-kept').checked : false;
+    if (!fid)                              { showToast('Nejdříve přidejte osobu s povolenkou', 'warning'); return; }
     if (!date)                             { showToast('Vyberte datum', 'warning'); return; }
     if (!length || length < 5 || length > 150) { showToast('Zadejte délku v cm (5–150)', 'warning'); return; }
     var id  = genId();
     var cat = {
-        id: id, fisherId: fid, species: SPECIES, length: length, kept: kept,
-        inRange: length >= MIN_LEN && length <= MAX_LEN,
+        id: id, fisherId: fid, species: meta.id, length: length, kept: kept,
+        inRange: catchLengthInRange(length, meta.id),
         date: date, timestamp: new Date().toISOString()
     };
     try {
@@ -975,7 +1042,9 @@ $('#btn-catch-submit').addEventListener('click', async function() {
         $('#catch-length-hint').textContent = '';
         $('#catch-length-hint').className   = 'form-hint';
         $('#catch-kept').checked   = false;
-        showToast('🐟 Úlovek ' + length + ' cm zapsán' + (kept ? ' · vzal rybu' : ''), 'success');
+        if ($('#catch-species')) $('#catch-species').selectedIndex = 0;
+        syncAdminCatchKeptRow();
+        showToast('🐟 Úlovek · ' + meta.label + ' ' + length + ' cm' + (kept ? ' · s sebou domů' : ''), 'success');
     } catch (err) {
         console.error(err);
         showToast('Nepodařilo se zapsat úlovek', 'danger');
@@ -993,25 +1062,27 @@ function renderUlovky() {
     const years  = [...new Set(sorted.map(c => c.timestamp?.slice(0,4)))].sort().reverse();
     const selYear = $('#ulovky-year-sel')?.value || years[0];
     const filtered = sorted.filter(c => c.timestamp?.startsWith(selYear));
-    const keptCount = filtered.filter(c => c.kept).length;
+    const keptCount = filtered.filter(c => isCatchKeptDisplayed(c)).length;
 
     cont.innerHTML = `
         <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.85rem;flex-wrap:wrap;">
             <select id="ulovky-year-sel" class="year-select" onchange="window._refreshUlovky()">
                 ${years.map(y=>`<option value="${y}" ${y===selYear?'selected':''}>${y}</option>`).join('')}
             </select>
-            <span style="font-size:.82rem;color:var(--text-secondary)">${filtered.length} úlovků · prům. ${filtered.length ? Math.round(filtered.reduce((s,c)=>s+c.length,0)/filtered.length) : 0} cm · ${keptCount} vzato</span>
+            <span style="font-size:.82rem;color:var(--text-secondary)">${filtered.length} úlovků · prům. ${filtered.length ? Math.round(filtered.reduce((s,c)=>s+c.length,0)/filtered.length) : 0} cm · ${keptCount}× domů</span>
         </div>
         ${filtered.map(cat => {
             const f = fishers.find(x => x.id === cat.fisherId);
+            const sp = getCatchSpeciesMeta(cat.species);
+            const inR = catchLengthInRange(cat.length, cat.species);
             return `<div class="catch-row">
                 <span class="catch-fish-icon">🐟</span>
                 <div class="catch-row-info">
                     <div class="catch-row-name">${f ? esc(f.name) : '?'}</div>
-                    <div class="catch-row-meta">${fmtDateShort(cat.date)} · ${fmtTime(cat.timestamp)}</div>
+                    <div class="catch-row-meta">${fmtDateShort(cat.date)} · ${fmtTime(cat.timestamp)} · ${esc(sp.label)}</div>
                 </div>
-                <span class="catch-length ${cat.inRange?'':'outside'}">${cat.length} cm</span>
-                ${cat.kept ? '<span class="catch-kept-badge">vzal</span>' : ''}
+                <span class="catch-length ${inR?'':'outside'}">${cat.length} cm</span>
+                ${isCatchKeptDisplayed(cat) ? '<span class="catch-kept-badge">domů</span>' : ''}
                 <button class="btn btn-danger btn-sm" onclick="window._deleteCatch('${cat.id}')">✕</button>
             </div>`;
         }).join('')}`;
@@ -1027,7 +1098,7 @@ window._deleteCatch = async function(id) {
         lsSave(LS.CATCHES, catches);
         renderUlovky();
         if (currentView === 'statistiky') renderStatistiky();
-        showToast('Úlovek smazán');
+        showToast('Úlovek odstraněn');
     } catch (err) {
         console.error(err);
         showToast('Nepodařilo se smazat úlovek', 'danger');
@@ -1041,7 +1112,7 @@ $('#btn-visit-submit').addEventListener('click', async function() {
     var fid         = $('#visit-fisher').value;
     var date        = $('#visit-date').value;
     var visitorName = $('#visit-name').value.trim();
-    if (!fid)         { showToast('Nejdříve přidejte držitele povolenky', 'warning'); return; }
+    if (!fid)         { showToast('Nejdříve přidejte osobu s povolenkou', 'warning'); return; }
     if (!visitorName) { showToast('Zadejte jméno návštěvy', 'warning'); return; }
     if (!date)        { showToast('Vyberte datum', 'warning'); return; }
     var id  = genId();
@@ -1051,7 +1122,7 @@ $('#btn-visit-submit').addEventListener('click', async function() {
         if (!fbReady) { visitors.push(v); lsSave(LS.VISITORS, visitors); }
         renderNavstevy();
         $('#visit-name').value = '';
-        showToast('👥 Návštěva zapsána · ' + FEE_VISIT + ' Kč', 'success');
+        showToast('👥 Záznam návštěvy uložen · ' + FEE_VISIT + ' Kč', 'success');
     } catch (err) {
         console.error(err);
         showToast('Nepodařilo se zapsat návštěvu', 'danger');
@@ -1088,7 +1159,7 @@ function renderNavstevy() {
                     return `<div class="visit-row">
                         <div class="visit-row-main">
                             <div class="visit-row-name">👤 ${esc(v.visitorName)}</div>
-                            <div class="visit-row-meta">hostitel: ${f ? esc(f.name) : '?'}</div>
+                            <div class="visit-row-meta">držitel povolenky: ${f ? esc(f.name) : '?'}</div>
                         </div>
                         <span class="visit-fee-badge">${v.fee ?? FEE_VISIT} Kč</span>
                         <button class="btn btn-danger btn-sm" onclick="window._deleteVisitor('${v.id}')">✕</button>
@@ -1107,7 +1178,7 @@ window._deleteVisitor = async function(id) {
         lsSave(LS.VISITORS, visitors);
         renderNavstevy();
         if (currentView === 'statistiky') renderStatistiky();
-        showToast('Záznam smazán');
+        showToast('Položka odstraněna');
     } catch (err) {
         console.error(err);
         showToast('Nepodařilo se smazat návštěvu', 'danger');
@@ -1134,7 +1205,7 @@ function renderStatistiky() {
         fisher:     f,
         visits:     yearCheckins.filter(c => c.fisherId===f.id).length,
         catches:    yearCatches.filter(c => c.fisherId===f.id).length,
-        keptCount:  yearCatches.filter(c => c.fisherId===f.id && c.kept).length,
+        keptCount:  yearCatches.filter(c => c.fisherId===f.id && isCatchKeptDisplayed(c)).length,
         visitorCnt: yearVisitors.filter(v => v.fisherId===f.id).length,
         visitorFee: yearVisitors.filter(v => v.fisherId===f.id).reduce((s,v) => s+(v.fee||0), 0),
         avgLen: (() => {
@@ -1168,7 +1239,7 @@ function renderStatistiky() {
                     <div class="fsc-bar-row">
                         <span class="fsc-bar-label">Úlovky</span>
                         <div class="fsc-bar-track"><div class="fsc-bar-fill catches" style="width:${Math.round(s.catches/maxCatches*100)}%"></div></div>
-                        <span class="fsc-bar-val">${s.catches}${s.keptCount ? ' ('+s.keptCount+' vzal)' : ''}</span>
+                        <span class="fsc-bar-val">${s.catches}${s.keptCount ? ' ('+s.keptCount+' domů)' : ''}</span>
                     </div>
                 </div>
             </div>`).join('')
@@ -1199,7 +1270,7 @@ function renderSettingsBiometric() {
     var adminFishers = fishers.filter(function(f) { return f.pinHash && adminHashes.indexOf(f.pinHash) >= 0; });
     var targets = fisher ? [fisher] : adminFishers;
     if (!targets.length) {
-        cont.innerHTML = '<p class="form-hint">Pro přidání otisku se odhlaste a přihlaste se svým 6místným PINem jako rybář (ne jako správce).</p>';
+        cont.innerHTML = '<p class="form-hint">Pro přidání otisku se odhlaste a přihlaste se 6místným PINem jako držitel povolenky (ne jako správce).</p>';
         return;
     }
     var html = '';
@@ -1286,7 +1357,7 @@ $('#btn-disconnect-firebase').addEventListener('click', () => {
 
 $('#btn-clear-all-data').addEventListener('click', function() {
     if (!isAdminMode() || !fbReady || !db) return;
-    if (!confirm('Opravdu smazat VŠECHNA data z databáze?\n\n• Všichni rybáři (držitelé povolenky)\n• Všechny úlovky\n• Veškerá docházka\n• Všechny návštěvy\n\nPIN a nastavení zůstanou. Tuto akci nelze vrátit.')) return;
+    if (!confirm('Opravdu smazat VŠECHNA data z databáze?\n\n• Všechny osoby s povolenkou\n• Všechny úlovky\n• Veškerá docházka\n• Všechny návštěvy\n\nPIN a nastavení zůstanou. Tuto akci nelze vrátit.')) return;
     if (!confirm('Naposledy: opravdu smazat všechna data?')) return;
     showToast('Mažu data…', 'info');
     Promise.all([
@@ -1310,8 +1381,8 @@ $('#btn-clear-all-data').addEventListener('click', function() {
 $('#login-biometric').addEventListener('click', function() { webauthnAuthenticate(); });
 $('#login-form').addEventListener('submit', async function(e) {
     e.preventDefault();
-    var pin = $('#login-pin').value.trim();
-    if (!pin) { showToast('Zadejte PIN', 'warning'); return; }
+    var pin = $('#login-pin').value.replace(/\D/g, '');
+    if (!pin) { showToast('Zadejte PIN (číslice)', 'warning'); return; }
     var btn = $('#login-submit');
     if (btn) { btn.disabled = true; btn.textContent = 'Ověřuji…'; }
     try {
@@ -1332,13 +1403,24 @@ $('#login-form').addEventListener('submit', async function(e) {
         }
         var fisher = fishers.find(function(f) { return f.pinHash === h; });
         var isAdmin = adminHashes.indexOf(h) >= 0;
+        if (!fisher && fbReady && db) {
+            try {
+                var fsnap = await db.ref('fishers').once('value');
+                var fv = fsnap.val();
+                if (fv) {
+                    fishers = Object.values(fv);
+                    lsSave(LS.FISHERS, fishers);
+                    fisher = fishers.find(function(f) { return f.pinHash === h; });
+                }
+            } catch (_) {}
+        }
         if (isAdmin && fisher) {
             pendingLoginFisher = fisher;
             openModal(modals.loginChoice);
         } else if (isAdmin) {
             try { localStorage.removeItem(LS.FISHER_ID); } catch (_) {}
             showAdminView();
-            showToast('Přihlášen jako správce', 'success');
+            showToast('Přihlášení: režim správce', 'success');
         } else if (fisher) {
             showFisherView(fisher);
             showToast('Vítejte, ' + fisher.name, 'success');
@@ -1347,7 +1429,14 @@ $('#login-form').addEventListener('submit', async function(e) {
         }
     } catch (err) {
         console.error(err);
-        showToast('Chyba při ověření', 'danger');
+        var em = err && err.message ? String(err.message) : '';
+        if (em.indexOf('HTTPS') >= 0 || em.indexOf('zabezpečen') >= 0) {
+            showToast(em, 'danger');
+        } else if (!window.crypto || !window.crypto.subtle) {
+            showToast('PIN vyžaduje HTTPS – otevřete https://hlubocek.github.io', 'danger');
+        } else {
+            showToast('Chyba při ověření', 'danger');
+        }
     }
     if (btn) { btn.disabled = false; btn.textContent = 'Přihlásit'; }
     $('#login-pin').value = '';
@@ -1358,7 +1447,7 @@ $('#login-choice-admin').addEventListener('click', function() {
     if (pendingLoginFisher) {
         try { localStorage.removeItem(LS.FISHER_ID); } catch (_) {}
         showAdminView();
-        showToast('Přihlášen jako správce', 'success');
+        showToast('Přihlášení: režim správce', 'success');
         closeModal(modals.loginChoice);
         pendingLoginFisher = null;
     }
@@ -1372,13 +1461,13 @@ $('#login-choice-fisher').addEventListener('click', function() {
     }
 });
 
-// Přepnutí admin → profil rybáře
+// Přepnutí admin → profil držitele
 $('#link-switch-to-fisher').addEventListener('click', function(e) {
     e.preventDefault();
     var adminFishers = getAdminFishers();
     if (adminFishers.length === 1) {
         showFisherView(adminFishers[0]);
-        showToast('Přepnuto na profil rybáře', 'success');
+        showToast('Přepnuto na profil držitele', 'success');
     } else if (adminFishers.length > 1) {
         var list = $('#pick-fisher-list');
         list.innerHTML = adminFishers.map(function(f) {
@@ -1394,7 +1483,7 @@ $('#link-switch-to-fisher').addEventListener('click', function(e) {
     }
 });
 
-// Přepnutí rybář → správce (ikona v headeru + tlačítko v obsahu)
+// Přepnutí držitel → správce (ikona v headeru + tlačítko v obsahu)
 function doSwitchToAdmin() {
     setAdminUnlocked(true);
     showAdminView();
@@ -1427,7 +1516,8 @@ function renderFisherProfile(fisher) {
         return '<div class="checkin-row"><span>' + fmtDate(c.date) + '</span><span>' + fmtTime(c.timestamp) + '</span></div>';
     }).join('') : '<p class="empty-hint">Zatím žádné příchody</p>';
     $('#fisher-my-catches').innerHTML = myCatches.length ? myCatches.map(function(c) {
-        return '<div class="catch-row"><span>🐟 ' + c.length + ' cm</span><span>' + fmtDateShort(c.date) + '</span>' + (c.kept ? ' <span class="catch-kept-badge">vzal</span>' : '') + '</div>';
+        var sp = getCatchSpeciesMeta(c.species);
+        return '<div class="catch-row"><span>🐟 ' + esc(sp.label) + ' ' + c.length + ' cm</span><span>' + fmtDateShort(c.date) + '</span>' + (isCatchKeptDisplayed(c) ? ' <span class="catch-kept-badge">domů</span>' : '') + '</div>';
     }).join('') : '<p class="empty-hint">Zatím žádné úlovky</p>';
     $('#fisher-my-visitors').innerHTML = myVisitors.length ? myVisitors.map(function(v) {
         return '<div class="visit-row"><span>👤 ' + esc(v.visitorName) + '</span><span>' + fmtDate(v.date) + ' · ' + (v.fee || FEE_VISIT) + ' Kč</span></div>';
@@ -1444,14 +1534,14 @@ $('#fisher-btn-checkin').addEventListener('click', async function() {
     if (!fisher) return;
     var date = today();
     var already = checkins.find(function(c) { return c.fisherId === fisher.id && c.date === date; });
-    if (already) { showToast('Dnes už máte zapsaný příchod', 'warning'); return; }
+    if (already) { showToast('Příchod na dnešek je už zapsaný', 'warning'); return; }
     var id = genId();
     var ci = { id: id, fisherId: fisher.id, date: date, timestamp: new Date().toISOString() };
     try {
         await dbSet('checkins', id, ci);
         if (!fbReady) { checkins.push(ci); lsSave(LS.CHECKINS, checkins); }
         renderFisherProfile(fisher);
-        showToast('✓ Příchod zapsán', 'success');
+        showToast('✓ Příchod uložen', 'success');
     } catch (err) {
         showToast('Nepodařilo se zapsat', 'danger');
     }
@@ -1459,34 +1549,33 @@ $('#fisher-btn-checkin').addEventListener('click', async function() {
 $('#fisher-btn-catch').addEventListener('click', function() {
     $('#fisher-catch-length').value = '';
     $('#fisher-catch-length-hint').textContent = '';
+    $('#fisher-catch-length-hint').className = 'form-hint';
+    if ($('#fisher-catch-species')) $('#fisher-catch-species').selectedIndex = 0;
     $('#fisher-catch-kept').checked = false;
+    syncFisherCatchKeptRow();
     openModal($('#modal-fisher-catch'));
 });
 $('#fisher-btn-visit').addEventListener('click', function() {
     $('#fisher-visit-name').value = '';
     openModal($('#modal-fisher-visit'));
 });
-$('#fisher-catch-length').addEventListener('input', function() {
-    var val = parseInt(this.value);
-    var hint = $('#fisher-catch-length-hint');
-    if (!val) { hint.textContent = ''; return; }
-    hint.textContent = (val >= MIN_LEN && val <= MAX_LEN) ? '✓ V normě' : '⚠ Mimo normu';
-});
 $('#fisher-catch-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     var fisher = getLoggedInFisher();
     if (!fisher) return;
+    var speciesId = ($('#fisher-catch-species') && $('#fisher-catch-species').value) || CATCH_SPECIES[0].id;
+    var meta = getCatchSpeciesMeta(speciesId);
     var length = parseInt($('#fisher-catch-length').value, 10);
-    var kept = $('#fisher-catch-kept').checked;
+    var kept = catchSpeciesAllowsKept(meta.id) ? $('#fisher-catch-kept').checked : false;
     if (!length || length < 5 || length > 150) { showToast('Zadejte délku 5–150 cm', 'warning'); return; }
     var id = genId();
-    var cat = { id: id, fisherId: fisher.id, species: SPECIES, length: length, kept: kept, inRange: length >= MIN_LEN && length <= MAX_LEN, date: today(), timestamp: new Date().toISOString() };
+    var cat = { id: id, fisherId: fisher.id, species: meta.id, length: length, kept: kept, inRange: catchLengthInRange(length, meta.id), date: today(), timestamp: new Date().toISOString() };
     try {
         await dbSet('catches', id, cat);
         if (!fbReady) { catches.push(cat); lsSave(LS.CATCHES, catches); }
         closeModal($('#modal-fisher-catch'));
         renderFisherProfile(fisher);
-        showToast('🐟 Úlovek ' + length + ' cm zapsán', 'success');
+        showToast('🐟 Úlovek · ' + meta.label + ' ' + length + ' cm' + (kept ? ' · s sebou domů' : ''), 'success');
     } catch (err) { showToast('Nepodařilo se zapsat', 'danger'); }
 });
 $('#fisher-visit-form').addEventListener('submit', async function(e) {
@@ -1502,7 +1591,7 @@ $('#fisher-visit-form').addEventListener('submit', async function(e) {
         if (!fbReady) { visitors.push(v); lsSave(LS.VISITORS, visitors); }
         closeModal($('#modal-fisher-visit'));
         renderFisherProfile(fisher);
-        showToast('👥 Návštěva zapsána · 300 Kč', 'success');
+        showToast('👥 Záznam návštěvy uložen · 300 Kč', 'success');
     } catch (err) { showToast('Nepodařilo se zapsat', 'danger'); }
 });
 $('#modal-close-fisher-catch').addEventListener('click', function() { closeModal($('#modal-fisher-catch')); });
@@ -1536,7 +1625,7 @@ $('#fisher-change-pin-form').addEventListener('submit', async function(e) {
     if (newPin.length !== 6 || !/^\d{6}$/.test(newPin)) { showToast('PIN musí být 6 číslic', 'warning'); return; }
     if (newPin !== conf) { showToast('PINy se neshodují', 'danger'); return; }
     var used = await isPinUsedByOther(newPin, fisher.id);
-    if (used) { showToast('Tento PIN už používá jiný rybář', 'danger'); return; }
+    if (used) { showToast('Tento PIN už patří k jinému záznamu', 'danger'); return; }
     var pinHash = await hashPin(newPin);
     fisher.pinHash = pinHash;
     fisher.pinDisplay = newPin;
@@ -1556,25 +1645,25 @@ function renderAdminPinsList() {
     if (!list) return;
     var hashes = getAdminPinHashes();
     if (!hashes.length) {
-        list.innerHTML = '<p class="form-hint">Zatím žádný správce. Přidejte první.</p>';
+        list.innerHTML = '<p class="form-hint">Zatím žádný správcovský PIN. Přidejte první.</p>';
         return;
     }
     var items = hashes.map(function(h, i) {
-        var displayName = getAdminDisplayName(h) || ('Správce ' + (i + 1));
+        var displayName = getAdminDisplayName(h) || ('Správcovský přístup ' + (i + 1));
         var canRemove = hashes.length > 1;
-        var removeBtn = canRemove ? '<button type="button" class="btn btn-danger btn-sm admin-pin-remove" data-hash="' + h + '" title="Odstranit správce">✕</button>' : '<span class="form-hint" style="font-size:.75rem;">(poslední)</span>';
+        var removeBtn = canRemove ? '<button type="button" class="btn btn-danger btn-sm admin-pin-remove" data-hash="' + h + '" title="Odstranit správcovský PIN">✕</button>' : '<span class="form-hint" style="font-size:.75rem;">(poslední)</span>';
         return '<div class="pin-item"><span class="pin-item-name">' + esc(displayName) + '</span>' + removeBtn + '</div>';
     }).join('');
-    list.innerHTML = '<p class="form-hint" style="margin-bottom:.5rem;">Aktivní správci (' + hashes.length + '):</p>' + items;
+    list.innerHTML = '<p class="form-hint" style="margin-bottom:.5rem;">Aktivní správcovské PINy (' + hashes.length + '):</p>' + items;
     list.querySelectorAll('.admin-pin-remove').forEach(function(btn) {
         btn.onclick = function() {
             var h = btn.getAttribute('data-hash');
-            if (!h || !confirm('Odstranit tohoto správce? Nebude se moci přihlásit.')) return;
+            if (!h || !confirm('Odstranit tento správcovský PIN? S ním už nepůjde přihlášení do režimu správce.')) return;
             if (removeAdminPinHash(h)) {
                 renderAdminPinsList();
-                showToast('Správce odstraněn', 'success');
+                showToast('Správcovský PIN odstraněn', 'success');
             } else {
-                showToast('Musí zůstat alespoň jeden správce', 'warning');
+                showToast('Musí zůstat alespoň jeden správcovský PIN', 'warning');
             }
         };
     });
@@ -1603,6 +1692,11 @@ if (!fbReady) {
 updateBiometricLoginVisibility();
 updateSyncBar();
 initYearSelectors();
+initCatchSpeciesSelects();
+bindCatchLengthSpeciesHints('#catch-length', '#catch-length-hint', '#catch-species', syncAdminCatchKeptRow);
+bindCatchLengthSpeciesHints('#fisher-catch-length', '#fisher-catch-length-hint', '#fisher-catch-species', syncFisherCatchKeptRow);
+syncAdminCatchKeptRow();
+syncFisherCatchKeptRow();
 populateFisherSelects();
 $('#ci-date').value = today();
 $('#catch-date').value = today();
@@ -1627,7 +1721,7 @@ document.addEventListener('click', function(e) {
         e.stopPropagation();
         setAdminUnlocked(false);
         showLoginScreen();
-        showToast('Odhlášeno ze správce');
+        showToast('Režim správce ukončen');
     }
 });
 
