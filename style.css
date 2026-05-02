@@ -454,6 +454,7 @@ main { max-width: 640px; margin: 0 auto; padding: 1rem; }
 .stat-label { font-size: .7rem; color: var(--text-secondary); margin-top: .05rem; }
 
 .fisher-stats-card {
+    position: relative;
     background: var(--surface); border-radius: var(--radius); padding: 1rem;
     box-shadow: var(--shadow-sm); border: 1px solid var(--border-light); margin-bottom: .65rem;
 }
@@ -473,6 +474,62 @@ main { max-width: 640px; margin: 0 auto; padding: 1rem; }
     font-size: .78rem; margin: 0 0 .45rem; padding: .35rem .6rem; background: rgba(26,107,60,.08);
     border-radius: var(--radius-sm); border: 1px solid rgba(26,107,60,.2);
 }
+
+.fsc-toggle {
+    cursor: pointer;
+    position: relative;
+    border-radius: var(--radius-sm);
+    margin: -.25rem;
+    padding: .25rem 1.6rem .25rem .25rem;
+}
+.fsc-toggle:focus {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+.fsc-expand-icon {
+    position: absolute;
+    right: .1rem;
+    top: .75rem;
+    font-size: .72rem;
+    color: var(--text-secondary);
+    transition: transform .2s ease;
+    pointer-events: none;
+}
+.fisher-stats-card.is-expanded .fsc-expand-icon { transform: rotate(90deg); }
+.fisher-stats-card.is-expanded {
+    box-shadow: var(--shadow-md);
+    border-color: rgba(26, 107, 60, 0.28);
+}
+.fsc-catch-detail {
+    margin-top: .4rem;
+    padding: .75rem .35rem 0;
+    border-top: 1px solid var(--border-light);
+}
+.fsc-catch-detail-title {
+    font-size: .76rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin: 0 0 .45rem;
+    letter-spacing: 0.02em;
+}
+.fsc-catch-list { max-height: 260px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.fsc-catch-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem .65rem;
+    font-size: .8rem;
+    padding: .42rem 0;
+    border-bottom: 1px solid var(--border-light);
+}
+.fsc-catch-row:last-child { border-bottom: none; }
+.fsc-catch-date {
+    color: var(--text-secondary);
+    flex: 0 0 auto;
+    min-width: 9.5rem;
+}
+.fsc-catch-fish { font-weight: 600; }
+.fsc-catch-empty { margin: 0; font-size: .8rem; color: var(--text-secondary); line-height: 1.4; }
 
 /* panel statistik – filtry */
 .stats-page-header { flex-wrap: wrap; align-items: flex-end; }

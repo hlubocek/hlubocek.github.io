@@ -1831,6 +1831,45 @@ window._deleteVisitor = async function(id) {
 // ════════════════════════════════════════
 // STATISTIKY
 // ════════════════════════════════════════
+function statsCatchDateLabel(c) {
+    var dRaw = c.date && String(c.date).slice(0, 10);
+    if (dRaw && /^\d{4}-\d{2}-\d{2}$/.test(dRaw)) return fmtDate(dRaw);
+    if (c.timestamp && typeof c.timestamp === 'string' && c.timestamp.length >= 10) {
+        var t = c.timestamp.slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return fmtDate(t);
+    }
+    return '—';
+}
+
+function toggleStatsFisherCard(card) {
+    if (!card) return;
+    card.classList.toggle('is-expanded');
+    var det = card.querySelector('.fsc-catch-detail');
+    var exp = card.classList.contains('is-expanded');
+    if (det) det.hidden = !exp;
+    var h = card.querySelector('.fsc-toggle');
+    if (h) h.setAttribute('aria-expanded', exp ? 'true' : 'false');
+}
+
+var statsFisherDetailExpandBound = false;
+function bindStatsFisherDetailExpandOnce() {
+    var cont = $('#statistiky-content');
+    if (!cont || statsFisherDetailExpandBound) return;
+    statsFisherDetailExpandBound = true;
+    cont.addEventListener('click', function(e) {
+        var toggle = e.target.closest('.fsc-toggle');
+        if (!toggle || !cont.contains(toggle)) return;
+        toggleStatsFisherCard(toggle.closest('.fisher-stats-card'));
+    });
+    cont.addEventListener('keydown', function(e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        var toggle = e.target.closest('.fsc-toggle');
+        if (!toggle || !cont.contains(toggle)) return;
+        e.preventDefault();
+        toggleStatsFisherCard(toggle.closest('.fisher-stats-card'));
+    });
+}
+
 function renderStatistiky() {
     const cont    = $('#statistiky-content');
     if (!cont) return;
@@ -1891,29 +1930,44 @@ function renderStatistiky() {
     const maxCatches = fisherStats.length ? Math.max(1, ...fisherStats.map(s => s.catches)) : 1;
 
     const emptyFilters = filterName || filterSpecies;
-    const fisherListHtml = fisherStats.length ? fisherStats.map(s => `
-            <div class="fisher-stats-card">
-                <div class="fsc-header">
-                    <div class="fisher-avatar" style="width:40px;height:40px;font-size:1rem;">${esc(initials(s.fisher.name))}</div>
-                    <div class="fsc-header-text">
-                        <div class="fsc-name">${esc(s.fisher.name)}</div>
-                        <div class="fsc-meta">${s.avgLen ? 'Ø délka úlovku ' + s.avgLen + ' cm' : 'Zatím bez úlovku v roce'}${s.visitorCnt ? ' · návštěvy ' + s.visitorCnt + ' (' + s.visitorFee + ' Kč)' : ''}</div>
+    const fisherListHtml = fisherStats.length ? fisherStats.map(s => {
+        const fcList = dedupeCatches(yearCatches.filter(c => c.fisherId === s.fisher.id && (!filterSpecies || c.species === filterSpecies)))
+            .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || '') || (b.date || '').localeCompare(a.date || ''));
+        const catchRows = fcList.length ? fcList.map(c => {
+            const sp = getCatchSpeciesMeta(c.species);
+            return `<div class="fsc-catch-row"><span class="fsc-catch-date">${statsCatchDateLabel(c)}</span><span class="fsc-catch-fish">🐟 ${esc(sp.label)} ${c.length} cm</span>${isCatchKeptDisplayed(c) ? '<span class="catch-kept-badge">domů</span>' : ''}</div>`;
+        }).join('') : '<p class="fsc-catch-empty">Žádný úlovek v tomto výběru (rok / filtr).</p>';
+        return `
+            <div class="fisher-stats-card" data-stats-fisher="${esc(s.fisher.id)}">
+                <div class="fsc-toggle" role="button" tabindex="0" aria-expanded="false" aria-label="Rozbalit úlovky s datem: ${esc(s.fisher.name)}">
+                    <span class="fsc-expand-icon" aria-hidden="true">▸</span>
+                    <div class="fsc-header">
+                        <div class="fisher-avatar" style="width:40px;height:40px;font-size:1rem;">${esc(initials(s.fisher.name))}</div>
+                        <div class="fsc-header-text">
+                            <div class="fsc-name">${esc(s.fisher.name)}</div>
+                            <div class="fsc-meta">${s.avgLen ? 'Ø délka úlovku ' + s.avgLen + ' cm' : 'Zatím bez úlovku v roce'}${s.visitorCnt ? ' · návštěvy ' + s.visitorCnt + ' (' + s.visitorFee + ' Kč)' : ''} · klepněte pro úlovky</div>
+                        </div>
+                    </div>
+                    ${filterSpecies && s.catchesThisSpecies != null ? `<div class="fsc-filter-tag">Úlovky (${esc(getCatchSpeciesMeta(filterSpecies).label)}): <strong>${s.catchesThisSpecies}</strong></div>` : ''}
+                    <div class="fsc-bars">
+                        <div class="fsc-bar-row">
+                            <span class="fsc-bar-label">Příchody</span>
+                            <div class="fsc-bar-track"><div class="fsc-bar-fill" style="width:${Math.round(s.visits/maxVisits*100)}%"></div></div>
+                            <span class="fsc-bar-val">${s.visits}</span>
+                        </div>
+                        <div class="fsc-bar-row">
+                            <span class="fsc-bar-label">Úlovky</span>
+                            <div class="fsc-bar-track"><div class="fsc-bar-fill catches" style="width:${Math.round(s.catches/maxCatches*100)}%"></div></div>
+                            <span class="fsc-bar-val">${s.catches}${s.keptCount ? ' <span class="fsc-kept-note">(' + s.keptCount +' domů)</span>' : ''}</span>
+                        </div>
                     </div>
                 </div>
-                ${filterSpecies && s.catchesThisSpecies != null ? `<div class="fsc-filter-tag">Úlovky (${esc(getCatchSpeciesMeta(filterSpecies).label)}): <strong>${s.catchesThisSpecies}</strong></div>` : ''}
-                <div class="fsc-bars">
-                    <div class="fsc-bar-row">
-                        <span class="fsc-bar-label">Příchody</span>
-                        <div class="fsc-bar-track"><div class="fsc-bar-fill" style="width:${Math.round(s.visits/maxVisits*100)}%"></div></div>
-                        <span class="fsc-bar-val">${s.visits}</span>
-                    </div>
-                    <div class="fsc-bar-row">
-                        <span class="fsc-bar-label">Úlovky</span>
-                        <div class="fsc-bar-track"><div class="fsc-bar-fill catches" style="width:${Math.round(s.catches/maxCatches*100)}%"></div></div>
-                        <span class="fsc-bar-val">${s.catches}${s.keptCount ? ' <span class="fsc-kept-note">(' + s.keptCount +' domů)</span>' : ''}</span>
-                    </div>
+                <div class="fsc-catch-detail" hidden>
+                    <div class="fsc-catch-detail-title">Úlovky (${fcList.length}×)</div>
+                    <div class="fsc-catch-list">${catchRows}</div>
                 </div>
-            </div>`).join('')
+            </div>`;
+    }).join('')
         : `<div class="empty-state stats-empty-filtered"><p>${emptyFilters ? 'Žádný držitel nevyhovuje filtru.' : 'Žádní držitelé v evidenci.'}</p></div>`;
 
     const speciesSection = `
@@ -1955,6 +2009,7 @@ function renderStatistiky() {
             if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
         });
     });
+    bindStatsFisherDetailExpandOnce();
 }
 
 function initYearSelectors() {
