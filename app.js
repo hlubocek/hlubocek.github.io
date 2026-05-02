@@ -288,18 +288,35 @@ function firebaseMultiPathUpdateChunked(updates) {
 }
 function offerFirebaseSyncAfterRestore() {
     if (!fbReady || !db) {
-        showToast('Data obnovena v tomto prohlížeči (Firebase nepřipojena).', 'success');
+        showToast('Data jsou uložena v tomto prohlížeči. Až budete mít Firebase připojenou, v Nastavení použijte „Odeslat vše do databáze“.', 'warning');
         return Promise.resolve();
     }
-    if (!confirm('Odeslat obnovená data do Firebase?\n\nDoporučeno — jinak může příští synchronizace z cloudu přepsat obnovené záznamy staršími kopiemi.')) {
-        showToast('Obnova jen lokálně. Později použijte „Obnovit data“ nebo znovu připojte Firebase a odešlete zálohu.', 'warning');
-        return Promise.resolve();
-    }
+    showToast('Odesílám obnovená data do databáze…', 'info');
     return firebaseMultiPathUpdateChunked(buildFirebaseSyncUpdates()).then(function() {
-        showToast('Obnova dokončena a uložena do Firebase.', 'success');
+        try { saveRollingLocalBackup('po_obnove_upload'); } catch (_) {}
+        showToast('Hotovo — data jsou v prohlížeči i v databázi.', 'success');
     }).catch(function(err) {
         console.error(err);
-        showToast('Obnova je uložena lokálně, upload do Firebase se nepovedl.', 'danger');
+        showToast('Data jsou v prohlížeči, upload do databáze selhal. Zkuste „Odeslat vše do databáze“ v Nastavení.', 'danger');
+    });
+}
+function pushAllLocalStateToFirebase(userInitiated) {
+    if (!fbReady || !db) {
+        showToast('Firebase není připojena.', 'warning');
+        return Promise.resolve();
+    }
+    var updates = buildFirebaseSyncUpdates();
+    if (!Object.keys(updates).length) {
+        showToast('Není co odeslat (žádné záznamy).', 'warning');
+        return Promise.resolve();
+    }
+    if (userInitiated) showToast('Odesílám aktuální stav do databáze…', 'info');
+    return firebaseMultiPathUpdateChunked(updates).then(function() {
+        try { saveRollingLocalBackup('po_rucnim_upload'); } catch (_) {}
+        if (userInitiated) showToast('Aktuální evidence je uložena v databázi.', 'success');
+    }).catch(function(err) {
+        console.error(err);
+        showToast('Odeslání do databáze se nepovedlo. Zkontrolujte síť a pravidla Firebase.', 'danger');
     });
 }
 function runRestoreFromParsedPayload(payload, mode) {
@@ -1248,7 +1265,7 @@ function updateSyncBar() {
     if (fbReady) {
         bar.className = 'sync-bar sync-firebase';
         icon.textContent = '🔥';
-        text.textContent = 'Firebase – data sdílena v reálném čase' + (fishers.length ? ' (' + fishers.length + ' v evidenci)' : '');
+        text.textContent = 'Firebase – každý zápis se ukládá do databáze' + (fishers.length ? ' (' + fishers.length + ' v evidenci)' : '');
         btn.style.display = 'none';
         if (refreshWrap) { refreshWrap.style.display = ''; refreshWrap.innerHTML = '<a href="#" id="sync-refresh-link">Obnovit</a>'; }
         var refLink = $('#sync-refresh-link');
@@ -1901,6 +1918,8 @@ function openSettings() {
     updateFbStatusBox();
     var restoreWrap = document.getElementById('settings-restore-wrap');
     if (restoreWrap) restoreWrap.style.display = isAdminMode() ? 'block' : 'none';
+    var pushAllBtn = document.getElementById('btn-push-all-firebase');
+    if (pushAllBtn) pushAllBtn.style.display = (isAdminMode() && fbReady) ? '' : 'none';
     renderSettingsBackupsList();
     openModal(modals.settings);
     var modalEl = modals.settings && modals.settings.querySelector('.modal');
@@ -1911,8 +1930,8 @@ function updateFbStatusBox() {
     const box = $('#firebase-status');
     if (!box) return;
     box.innerHTML = fbReady
-        ? '<div class="fb-status-ok">✅ Firebase připojena – data jsou sdílena</div>'
-        : '<div class="fb-status-warn">⚠️ Firebase není připojena – data jsou pouze lokální</div>';
+        ? '<div class="fb-status-ok">✅ Firebase připojena. Údaje o držitelích, docházce, úlovcích a návštěvách se při práci <strong>ukládají přímo do databáze</strong> — není potřeba nic ručně „nahrávat“ po každé změně.</div>'
+        : '<div class="fb-status-warn">⚠️ Firebase není připojena — změny zůstávají jen v tomto prohlížeči. Pro sdílenou evidenci připojte databázi níže.</div>';
 }
 
 $('#btn-open-settings').addEventListener('click', openSettings);
@@ -1976,7 +1995,16 @@ $('#btn-disconnect-firebase').addEventListener('click', () => {
     fbReady = false; db = null;
     updateSyncBar(); updateFbStatusBox();
     $('#btn-disconnect-firebase').style.display = 'none';
+    var pab = document.getElementById('btn-push-all-firebase');
+    if (pab) pab.style.display = 'none';
     showToast('Firebase odpojena', 'warning');
+});
+
+var btnPushAllFirebase = document.getElementById('btn-push-all-firebase');
+if (btnPushAllFirebase) btnPushAllFirebase.addEventListener('click', function() {
+    if (!isAdminMode() || !fbReady || !db) return;
+    if (!confirm('Odeslat celý aktuální stav z tohoto prohlížeče do sdílené databáze?\n\nZáznamy se doplní nebo přepíšou podle id. Použijte po obnově ze zálohy nebo když si nejste jistí, že je cloud v souladu s tím, co vidíte tady.')) return;
+    pushAllLocalStateToFirebase(true);
 });
 
 $('#btn-clear-all-data').addEventListener('click', function() {

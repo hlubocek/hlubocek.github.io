@@ -324,24 +324,25 @@
                 <button type="button" class="btn btn-primary btn-full" id="btn-save-pin">Přidat PIN správce</button>
             </div>
             <div class="settings-section">
-                <h4>💾 Záloha a obnova dat</h4>
-                <p class="settings-desc">Kompletní JSON (držitelé, docházka, úlovky, návštěvy). V prohlížeči se drží posledních 10 automatických snímků. Obnovení je jen v <strong>režimu správce</strong>.</p>
+                <h4>💾 Záloha mimo prohlížeč</h4>
+                <p class="settings-desc">Při <strong>připojené Firebase</strong> běžné zápisy jdou rovnou do databáze — nic se nemusí po každé změně ručně nahrávat. Soubor JSON je kopie „na jistotu“ (disk, e-mail), vhodná před větší úpravou kódu nebo při obnově. Obnova ze souboru jen v <strong>režimu správce</strong>.</p>
                 <button type="button" class="btn btn-secondary btn-full" id="btn-download-backup">Stáhnout zálohu (JSON)</button>
                 <input type="file" id="backup-restore-file" accept="application/json,.json" style="display:none" aria-hidden="true">
                 <div id="settings-restore-wrap" style="display:none;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border-light);">
-                    <p class="settings-desc" style="margin-bottom:.5rem;"><strong>Sloučit</strong> = doplní a aktualizuje podle <code>id</code> (bezpečnější). <strong>Nahradit lokálně</strong> = přepíše paměť prohlížeče zálohou (předtím si stáhněte aktuální JSON). Po obnově u připojené Firebase doporučujeme hned odeslat do databáze.</p>
+                    <p class="settings-desc" style="margin-bottom:.5rem;"><strong>Sloučit</strong> — doplní záznamy a podle <code>id</code> přepíše shodné (bezpečnější). <strong>Nahradit lokálně</strong> — v tomto prohlížeči přepíše celou evidenci zálohou (nejdřív si případně stáhněte aktuální JSON).</p>
+                    <p class="form-hint" style="margin-bottom:.65rem;">Po obnově ze souboru se při připojené Firebase data <strong>automaticky odešlou do databáze</strong>. Pokud by upload selhal, použijte v sekci Firebase tlačítko „Odeslat vše do databáze“.</p>
                     <div style="display:flex;flex-direction:column;gap:.45rem;">
                         <button type="button" class="btn btn-secondary btn-full" id="btn-restore-backup-merge">Obnovit ze souboru — sloučit</button>
                         <button type="button" class="btn btn-secondary btn-full" id="btn-restore-backup-replace">Obnovit ze souboru — nahradit lokálně</button>
                     </div>
-                    <h4 style="margin:1rem 0 .4rem;font-size:1rem;">Snímky v tomto prohlížeči</h4>
-                    <p class="form-hint" style="margin-bottom:.5rem;">Nejnovější nahoře. Sloučení / náhrada + volitelné nahrání do Firebase.</p>
+                    <h4 style="margin:1rem 0 .4rem;font-size:1rem;">Poslední snímky v tomto prohlížeči</h4>
+                    <p class="form-hint" style="margin-bottom:.5rem;">Ukládají se automaticky po synchronizaci a po stažení zálohy (nejnovější nahoře, max. 10).</p>
                     <div id="settings-backups-list" class="admin-pins-list"></div>
                 </div>
             </div>
             <div class="settings-section">
                 <h4>🔥 Firebase – sdílení dat</h4>
-                <p class="settings-desc">Bez Firebase jsou data jen v tomto prohlížeči. S Firebase jsou <strong>stejná data u všech zařízení</strong> v reálném čase. Pokud připojení nefunguje, v Firebase Console nastavte pravidla (Rules) – viz soubor FIREBASE-SETUP.md v projektu.</p>
+                <p class="settings-desc">Bez Firebase zůstávají data jen v tomto prohlížeči. Po připojení se zapisují do databáze <strong>automaticky při práci</strong> a jsou stejná na všech zařízeních. Nezapomeňte v konzoli nastavit pravidla (Rules) — viz <strong>FIREBASE-SETUP.md</strong>.</p>
                 <div id="firebase-status" class="firebase-status-box"></div>
                 <div class="form-group">
                     <label for="settings-firebase-url">Database URL</label>
@@ -352,6 +353,7 @@
                     <input type="text" id="settings-firebase-key" placeholder="AIzaSy...">
                 </div>
                 <button class="btn btn-primary btn-full" id="btn-save-firebase">Připojit</button>
+                <button type="button" class="btn btn-secondary btn-full" id="btn-push-all-firebase" style="margin-top:0.5rem;display:none;">Odeslat vše do databáze (aktuální stav z tohoto zařízení)</button>
                 <button class="btn btn-secondary btn-full" id="btn-disconnect-firebase" style="margin-top:0.5rem;display:none;">Odpojit Firebase</button>
             </div>
             <div class="settings-section settings-danger-section" id="settings-clear-data-wrap" style="display:none;">
