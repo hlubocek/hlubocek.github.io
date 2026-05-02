@@ -651,6 +651,38 @@ function clearLoginStatus() {
     setLoginStatus('', false);
 }
 
+/** Přihlášení PINem – registrace hned zde, aby pozdější chyba v init nenechala formulář „mrtvý“. */
+function onLoginFormSubmit(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    doLoginPinFlow().catch(function(err) {
+        console.error('doLoginPinFlow', err);
+        var btn = document.getElementById('login-submit');
+        if (btn) { btn.disabled = false; btn.textContent = 'Přihlásit'; }
+        setLoginStatus('Neočekávaná chyba při přihlášení. Obnovte stránku (Ctrl+F5).', true);
+    });
+}
+(function wireLoginFormEarly() {
+    var loginFormEl = document.getElementById('login-form');
+    if (loginFormEl) loginFormEl.addEventListener('submit', onLoginFormSubmit);
+    var loginSubmitBtn = document.getElementById('login-submit');
+    if (loginSubmitBtn) {
+        loginSubmitBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            onLoginFormSubmit(e);
+        });
+    }
+    var loginPinField0 = document.getElementById('login-pin');
+    if (loginPinField0) {
+        loginPinField0.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            var f = document.getElementById('login-form');
+            if (f && typeof f.requestSubmit === 'function') f.requestSubmit();
+            else onLoginFormSubmit(e);
+        });
+    }
+})();
+
 // ── Modals ──
 const modals = {
     fisher:       $('#modal-fisher'),
@@ -936,14 +968,28 @@ async function ensureLoginDataFromFirebase() {
 /** Stejné jako ensureLoginDataFromFirebase, ale s časovým limitem (aby UI neviselo na „Ověřuji…“). */
 function ensureLoginDataFromFirebaseOrTimeout(ms) {
     ms = ms || 14000;
-    return Promise.race([
-        ensureLoginDataFromFirebase(),
-        new Promise(function(_, reject) {
-            setTimeout(function() {
-                reject(new Error('Načtení dat pro přihlášení přesáhlo časový limit. Zkuste znovu nebo síť / blokování InPrivate.'));
-            }, ms);
-        })
-    ]);
+    return new Promise(function(resolve, reject) {
+        var settled = false;
+        var t = setTimeout(function() {
+            if (settled) return;
+            settled = true;
+            reject(new Error('Načtení dat pro přihlášení přesáhlo časový limit. Zkuste znovu nebo síť / blokování InPrivate.'));
+        }, ms);
+        Promise.resolve(ensureLoginDataFromFirebase()).then(
+            function() {
+                if (settled) return;
+                settled = true;
+                clearTimeout(t);
+                resolve();
+            },
+            function(e) {
+                if (settled) return;
+                settled = true;
+                clearTimeout(t);
+                reject(e);
+            }
+        );
+    });
 }
 function getAdminFishers() {
     var hashes = getAdminPinHashes();
@@ -1172,6 +1218,7 @@ async function webauthnAuthenticate() {
 // ── Sync bar ──
 function updateSyncBar() {
     const bar = $('#sync-bar'), icon = $('#sync-icon'), text = $('#sync-text'), btn = $('#btn-sync-setup'), refreshWrap = $('#sync-refresh-wrap');
+    if (!bar || !icon || !text || !btn) return;
     if (fbReady) {
         bar.className = 'sync-bar sync-firebase';
         icon.textContent = '🔥';
@@ -1755,11 +1802,13 @@ function renderStatistiky() {
 }
 
 function initYearSelectors() {
+    const el = $('#stats-year');
+    if (!el) return;
     const curYear = new Date().getFullYear();
     const years   = [curYear, curYear-1, curYear-2];
     const opts    = years.map(y => `<option value="${y}">${y}</option>`).join('');
-    $('#stats-year').innerHTML = opts;
-    $('#stats-year').addEventListener('change', renderStatistiky);
+    el.innerHTML = opts;
+    el.addEventListener('change', renderStatistiky);
 }
 
 // ════════════════════════════════════════
@@ -2005,25 +2054,6 @@ async function doLoginPinFlow() {
     }
     if (btn) { btn.disabled = false; btn.textContent = 'Přihlásit'; }
     if (pinEl) pinEl.value = '';
-}
-
-function onLoginFormSubmit(e) {
-    if (e && e.preventDefault) e.preventDefault();
-    void doLoginPinFlow();
-}
-
-var loginFormEl = document.getElementById('login-form');
-if (loginFormEl) loginFormEl.addEventListener('submit', onLoginFormSubmit);
-
-var loginPinField = document.getElementById('login-pin');
-if (loginPinField) {
-    loginPinField.addEventListener('keydown', function(e) {
-        if (e.key !== 'Enter') return;
-        e.preventDefault();
-        var f = document.getElementById('login-form');
-        if (f && typeof f.requestSubmit === 'function') f.requestSubmit();
-        else onLoginFormSubmit(e);
-    });
 }
 
 // Pending login choice (když PIN platí pro oba režimy)
@@ -2284,9 +2314,10 @@ bindCatchLengthSpeciesHints('#fisher-catch-length', '#fisher-catch-length-hint',
 syncAdminCatchKeptRow();
 syncFisherCatchKeptRow();
 populateFisherSelects();
-$('#ci-date').value = today();
-$('#catch-date').value = today();
-$('#visit-date').value = today();
+var _ci = $('#ci-date'), _cd = $('#catch-date'), _vd = $('#visit-date');
+if (_ci) _ci.value = today();
+if (_cd) _cd.value = today();
+if (_vd) _vd.value = today();
 
 var fisher = getLoggedInFisher();
 var lastView = null;

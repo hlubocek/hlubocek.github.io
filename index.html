@@ -29,7 +29,7 @@
             <p class="login-hint">Zadejte PIN (držitel povolenky: 6 číslic, správce: 4–8). PIN funguje vždy — otisk / Face ID je jen zkratka a v anonymním okně nemusí být k dispozici.</p>
             <form id="login-form" novalidate action="#" method="post">
                 <input type="tel" id="login-pin" inputmode="numeric" maxlength="8" placeholder="např. 123456" autocomplete="one-time-code" autocorrect="off" spellcheck="false" autofocus class="login-pin-input">
-                <button type="submit" class="btn btn-primary btn-full" id="login-submit">Přihlásit</button>
+                <button type="button" class="btn btn-primary btn-full" id="login-submit">Přihlásit</button>
                 <p id="login-status" class="login-status" aria-live="polite"></p>
                 <button type="button" class="btn btn-secondary btn-full btn-biometric" id="login-biometric" style="display:none;margin-top:.5rem;">👆 Přihlásit otiskem / Face ID</button>
             </form>
