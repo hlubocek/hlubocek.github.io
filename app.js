@@ -216,11 +216,24 @@ function dedupeVisitors(arr) {
         return true;
     });
 }
-/** Kalendářní rok záznamu návštěvy: u nových z timestamp, u starších výhradně z date (YYYY-MM-DD). */
+/** Kalendářní rok záznamu návštěvy: timestamp ISO, date YYYY-MM-DD, případně d.m.yyyy apod. */
 function visitorRecordYear(v) {
     if (!v) return '';
-    if (v.timestamp && typeof v.timestamp === 'string' && v.timestamp.length >= 4) return v.timestamp.slice(0, 4);
-    if (v.date && typeof v.date === 'string' && v.date.length >= 4) return v.date.slice(0, 4);
+    if (v.timestamp && typeof v.timestamp === 'string' && v.timestamp.length >= 4) {
+        var yt = v.timestamp.slice(0, 4);
+        if (/^\d{4}$/.test(yt)) return yt;
+    }
+    var d = v.date;
+    if (d == null || d === '') return '';
+    d = String(d).trim();
+    var m = d.match(/^(\d{4})-\d{2}-\d{2}/);
+    if (m) return m[1];
+    m = d.match(/^(\d{4})[./-]/);
+    if (m) return m[1];
+    m = d.match(/(\d{1,2})[./](\d{1,2})[./](\d{4})/);
+    if (m) return m[3];
+    m = d.match(/(\d{4})/);
+    if (m) return m[1];
     return '';
 }
 
@@ -1144,18 +1157,22 @@ function renderNavstevy() {
     }
     const deduped = dedupeVisitors(visitors);
     const sorted  = [...deduped].sort((a,b) => {
-        var d = b.date.localeCompare(a.date);
+        var da = a.date || '', db = b.date || '';
+        var d = db.localeCompare(da);
         if (d !== 0) return d;
         var ta = a.timestamp || '', tb = b.timestamp || '';
         return tb.localeCompare(ta);
     });
-    var years = [...new Set(sorted.map(v => visitorRecordYear(v)).filter(Boolean))].sort().reverse();
-    if (!years.length && sorted.length) {
-        years = [new Date().getFullYear().toString()];
+    var VISITORS_ALL_YEARS = '__all__';
+    var yearsNum = [...new Set(sorted.map(v => visitorRecordYear(v)).filter(function(y) { return y && /^\d{4}$/.test(y); }))].sort().reverse();
+    var yearChoices = yearsNum.length ? [VISITORS_ALL_YEARS].concat(yearsNum) : [VISITORS_ALL_YEARS];
+    var prevSel = $('#navstevy-year-sel') && $('#navstevy-year-sel').value;
+    var selYear = (prevSel && yearChoices.indexOf(prevSel) >= 0) ? prevSel : VISITORS_ALL_YEARS;
+    var filtered = selYear === VISITORS_ALL_YEARS ? sorted.slice() : sorted.filter(function(v) { return visitorRecordYear(v) === selYear; });
+    if (!filtered.length && sorted.length && selYear !== VISITORS_ALL_YEARS) {
+        selYear = VISITORS_ALL_YEARS;
+        filtered = sorted.slice();
     }
-    var selYear = ($('#navstevy-year-sel') && $('#navstevy-year-sel').value) || years[0] || new Date().getFullYear().toString();
-    if (years.length && years.indexOf(selYear) < 0) selYear = years[0];
-    const filtered  = sorted.filter(v => visitorRecordYear(v) === selYear);
     const totalFee  = filtered.reduce((s,v) => s + (v.fee ?? FEE_VISIT), 0);
     const groups    = {};
     filtered.forEach(v => { if (!groups[v.date]) groups[v.date] = []; groups[v.date].push(v); });
@@ -1163,7 +1180,7 @@ function renderNavstevy() {
     cont.innerHTML = `
         <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.85rem;flex-wrap:wrap;">
             <select id="navstevy-year-sel" class="year-select" onchange="window._refreshNavstevy()">
-                ${years.map(y=>`<option value="${y}" ${y===selYear?'selected':''}>${y}</option>`).join('')}
+                ${yearChoices.map(y=>`<option value="${y}" ${y===selYear?'selected':''}>${y === VISITORS_ALL_YEARS ? 'Všechny roky' : y}</option>`).join('')}
             </select>
             <span style="font-size:.82rem;color:var(--text-secondary)">${filtered.length} návštěv · celkem <strong>${totalFee} Kč</strong></span>
         </div>
