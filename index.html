@@ -218,9 +218,26 @@
 
         <!-- STATISTIKY -->
         <section id="view-statistiky" class="view">
-            <div class="section-header">
+            <div class="section-header stats-page-header">
                 <h2>Statistiky</h2>
-                <select id="stats-year" class="year-select"></select>
+                <div class="stats-header-year">
+                    <label class="stats-year-label" for="stats-year">Rok</label>
+                    <select id="stats-year" class="year-select" aria-label="Rok přehledu"></select>
+                </div>
+            </div>
+            <div class="stats-toolbar" id="stats-toolbar">
+                <div class="stats-filter-row">
+                    <input type="search" id="stats-filter-name" class="stats-filter-input" placeholder="Hledat držitele…" autocomplete="off" aria-label="Filtrovat podle jména">
+                    <select id="stats-filter-species" class="stats-filter-select" aria-label="Druh ryby u úlovků">
+                        <option value="">Všechny druhy (úlovky)</option>
+                    </select>
+                    <select id="stats-sort" class="stats-filter-select" aria-label="Řazení seznamu">
+                        <option value="visits">Řadit: nejvíc příchodů</option>
+                        <option value="catches">Řadit: nejvíc úlovků</option>
+                        <option value="name">Řadit: jméno A–Z</option>
+                    </select>
+                </div>
+                <p class="stats-toolbar-hint">Horní karty a přehled druhů = celý vybraný rok. Filtry ovlivní jen <strong>seznam držitelů</strong> (jméno, druh úlovku u dané osoby).</p>
             </div>
             <div id="statistiky-content"></div>
         </section>

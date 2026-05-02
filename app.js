@@ -1787,47 +1787,74 @@ window._deleteVisitor = async function(id) {
 // ════════════════════════════════════════
 function renderStatistiky() {
     const cont    = $('#statistiky-content');
+    if (!cont) return;
     const yearSel = $('#stats-year');
-    const curYear = yearSel.value || new Date().getFullYear().toString();
+    const curYear = yearSel && yearSel.value ? yearSel.value : new Date().getFullYear().toString();
 
     const yearCheckins = checkins.filter(c => c.date?.startsWith(curYear));
     const yearCatches  = catches.filter(c => c.timestamp?.startsWith(curYear));
     const yearVisitors = visitors.filter(v => visitorRecordYear(v) === curYear);
-    const totalVisitFee = yearVisitors.reduce((s,v) => s + (v.fee||0), 0);
+    const totalVisitFee = yearVisitors.reduce((s,v) => s + (v.fee||FEE_VISIT), 0);
 
-    const maxVisits  = Math.max(1, ...fishers.map(f => yearCheckins.filter(c => c.fisherId===f.id).length));
-    const maxCatches = Math.max(1, ...fishers.map(f => yearCatches.filter(c => c.fisherId===f.id).length));
+    const filterName = (document.getElementById('stats-filter-name') && document.getElementById('stats-filter-name').value || '').trim().toLowerCase();
+    const filterSpecies = (document.getElementById('stats-filter-species') && document.getElementById('stats-filter-species').value) || '';
+    const sortMode = (document.getElementById('stats-sort') && document.getElementById('stats-sort').value) || 'visits';
 
-    const fisherStats = [...fishers].map(f => ({
+    const inRangeTotal = yearCatches.filter(c => c.inRange).length;
+    const keptTotal = yearCatches.filter(c => isCatchKeptDisplayed(c)).length;
+
+    const speciesBlocks = CATCH_SPECIES.map(sp => {
+        const list = yearCatches.filter(c => c.species === sp.id);
+        const cnt = list.length;
+        const avg = cnt ? Math.round(list.reduce((s,c) => s + c.length, 0) / cnt) : 0;
+        const inN = list.filter(c => c.inRange).length;
+        return { meta: sp, count: cnt, avgLen: avg, inRange: inN };
+    });
+    const maxSpecCount = Math.max(1, ...speciesBlocks.map(b => b.count));
+
+    const fisherStatsAll = [...fishers].map(f => ({
         fisher:     f,
         visits:     yearCheckins.filter(c => c.fisherId===f.id).length,
         catches:    yearCatches.filter(c => c.fisherId===f.id).length,
         keptCount:  yearCatches.filter(c => c.fisherId===f.id && isCatchKeptDisplayed(c)).length,
         visitorCnt: yearVisitors.filter(v => v.fisherId===f.id).length,
-        visitorFee: yearVisitors.filter(v => v.fisherId===f.id).reduce((s,v) => s+(v.fee||0), 0),
+        visitorFee: yearVisitors.filter(v => v.fisherId===f.id).reduce((s,v) => s+(v.fee||FEE_VISIT), 0),
         avgLen: (() => {
             const fc = yearCatches.filter(c => c.fisherId===f.id);
             return fc.length ? Math.round(fc.reduce((s,c)=>s+c.length,0)/fc.length) : 0;
-        })()
-    })).sort((a,b) => b.visits - a.visits || b.catches - a.catches);
+        })(),
+        catchesThisSpecies: filterSpecies
+            ? yearCatches.filter(c => c.fisherId===f.id && c.species===filterSpecies).length
+            : null
+    }));
 
-    const inRange = yearCatches.filter(c => c.inRange).length;
+    let fisherStats = fisherStatsAll.filter(s => {
+        if (filterName && !String(s.fisher.name||'').toLowerCase().includes(filterName)) return false;
+        if (filterSpecies) {
+            const has = yearCatches.some(c => c.fisherId===s.fisher.id && c.species===filterSpecies);
+            if (!has) return false;
+        }
+        return true;
+    });
 
-    cont.innerHTML = `
-        <div class="stats-summary">
-            <div class="stat-card"><div class="stat-value">${yearCheckins.length}</div><div class="stat-label">Příchodů</div></div>
-            <div class="stat-card"><div class="stat-value">${yearCatches.length}</div><div class="stat-label">Úlovků</div></div>
-            <div class="stat-card"><div class="stat-value">${yearVisitors.length}</div><div class="stat-label">Návštěv</div></div>
-            <div class="stat-card"><div class="stat-value">${totalVisitFee ? totalVisitFee+' Kč' : '—'}</div><div class="stat-label">Za návštěvy</div></div>
-        </div>
-        <p class="form-hint" style="margin:.85rem 0 0;line-height:1.45;max-width:36rem;"><strong>Příchody</strong> jsou záznamy ze záložky Docházka; <strong>návštěvy</strong> jsou hosté zapsaní v záložce Návštěvy (jméno a poplatek). Součty v této tabulce nelze „rozvinout“ na jednotlivé řádky zpět — pracuje se se stejnými daty jako v přehledech. Pravidelně stahujte zálohu v nastavení.</p>
-        ${fisherStats.length ? fisherStats.map(s => `
+    if (sortMode === 'catches') fisherStats.sort((a,b) => b.catches - a.catches || b.visits - a.visits || a.fisher.name.localeCompare(b.fisher.name,'cs'));
+    else if (sortMode === 'name') fisherStats.sort((a,b) => a.fisher.name.localeCompare(b.fisher.name,'cs'));
+    else fisherStats.sort((a,b) => b.visits - a.visits || b.catches - a.catches || a.fisher.name.localeCompare(b.fisher.name,'cs'));
+
+    const maxVisits  = fisherStats.length ? Math.max(1, ...fisherStats.map(s => s.visits)) : 1;
+    const maxCatches = fisherStats.length ? Math.max(1, ...fisherStats.map(s => s.catches)) : 1;
+
+    const emptyFilters = filterName || filterSpecies;
+    const fisherListHtml = fisherStats.length ? fisherStats.map(s => `
             <div class="fisher-stats-card">
                 <div class="fsc-header">
-                    <div class="fisher-avatar" style="width:36px;height:36px;font-size:.9rem;">${esc(initials(s.fisher.name))}</div>
-                    <div class="fsc-name">${esc(s.fisher.name)}</div>
-                    <span style="font-size:.78rem;color:var(--text-secondary)">${s.avgLen ? s.avgLen+' cm prům.' : ''}${s.visitorCnt ? ' · 👥 '+s.visitorCnt+' ('+s.visitorFee+' Kč)' : ''}</span>
+                    <div class="fisher-avatar" style="width:40px;height:40px;font-size:1rem;">${esc(initials(s.fisher.name))}</div>
+                    <div class="fsc-header-text">
+                        <div class="fsc-name">${esc(s.fisher.name)}</div>
+                        <div class="fsc-meta">${s.avgLen ? 'Ø délka úlovku ' + s.avgLen + ' cm' : 'Zatím bez úlovku v roce'}${s.visitorCnt ? ' · návštěvy ' + s.visitorCnt + ' (' + s.visitorFee + ' Kč)' : ''}</div>
+                    </div>
                 </div>
+                ${filterSpecies && s.catchesThisSpecies != null ? `<div class="fsc-filter-tag">Úlovky (${esc(getCatchSpeciesMeta(filterSpecies).label)}): <strong>${s.catchesThisSpecies}</strong></div>` : ''}
                 <div class="fsc-bars">
                     <div class="fsc-bar-row">
                         <span class="fsc-bar-label">Příchody</span>
@@ -1837,21 +1864,82 @@ function renderStatistiky() {
                     <div class="fsc-bar-row">
                         <span class="fsc-bar-label">Úlovky</span>
                         <div class="fsc-bar-track"><div class="fsc-bar-fill catches" style="width:${Math.round(s.catches/maxCatches*100)}%"></div></div>
-                        <span class="fsc-bar-val">${s.catches}${s.keptCount ? ' ('+s.keptCount+' domů)' : ''}</span>
+                        <span class="fsc-bar-val">${s.catches}${s.keptCount ? ' <span class="fsc-kept-note">(' + s.keptCount +' domů)</span>' : ''}</span>
                     </div>
                 </div>
             </div>`).join('')
-        : '<div class="empty-state"><p>Žádná data pro vybraný rok.</p></div>'}`;
+        : `<div class="empty-state stats-empty-filtered"><p>${emptyFilters ? 'Žádný držitel nevyhovuje filtru.' : 'Žádní držitelé v evidenci.'}</p></div>`;
+
+    const speciesSection = `
+        <div class="stats-species-section">
+            <h3 class="stats-block-title">Úlovky podle druhu (${curYear})</h3>
+            <div class="stats-species-grid">
+                ${speciesBlocks.map(b => `
+                <div class="stats-species-card${filterSpecies===b.meta.id ? ' is-filter-active' : ''}" data-species="${b.meta.id}" role="button" tabindex="0" title="Klik: filtrovat seznam držitelů podle tohoto druhu">
+                    <div class="stats-species-name">${esc(b.meta.label)}</div>
+                    <div class="stats-species-count">${b.count}×</div>
+                    <div class="stats-species-detail">${b.count ? 'Ø ' + b.avgLen + ' cm · v normě ' + b.inRange + '×' : '—'}</div>
+                    <div class="stats-species-bar"><div class="stats-species-fill" style="width:${Math.round(b.count/maxSpecCount*100)}%"></div></div>
+                </div>`).join('')}
+            </div>
+            <p class="form-hint stats-species-click-hint">Tip: klepněte na kartu druhu — nastaví stejný filtr jako rozbalovací seznam výše (druhý klik filtr zruší).</p>
+            <p class="form-hint stats-norm-hint">Celkem v roce: <strong>${inRangeTotal}</strong> úlovků v rozmezí dle řádu, <strong>${keptTotal}</strong> označených odnosu domů (u povolených druhů).</p>
+        </div>`;
+
+    cont.innerHTML = `
+        <div class="stats-summary">
+            <div class="stat-card"><div class="stat-value">${yearCheckins.length}</div><div class="stat-label">Příchodů</div></div>
+            <div class="stat-card"><div class="stat-value">${yearCatches.length}</div><div class="stat-label">Úlovků</div></div>
+            <div class="stat-card"><div class="stat-value">${yearVisitors.length}</div><div class="stat-label">Návštěv</div></div>
+            <div class="stat-card"><div class="stat-value">${yearVisitors.length ? totalVisitFee + ' Kč' : '—'}</div><div class="stat-label">Poplatky návštěv</div></div>
+        </div>
+        ${speciesSection}
+        <h3 class="stats-block-title stats-list-title">Držitelé${emptyFilters ? ' <span class="stats-filter-badge">filtrován seznam</span>' : ''}</h3>
+        ${fisherListHtml}`;
+    cont.querySelectorAll('.stats-species-card[data-species]').forEach(function(card) {
+        function toggle() {
+            var id = card.getAttribute('data-species');
+            var sel = document.getElementById('stats-filter-species');
+            if (!sel || !id) return;
+            sel.value = (sel.value === id) ? '' : id;
+            renderStatistiky();
+        }
+        card.addEventListener('click', toggle);
+        card.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+        });
+    });
 }
 
 function initYearSelectors() {
     const el = $('#stats-year');
     if (!el) return;
     const curYear = new Date().getFullYear();
-    const years   = [curYear, curYear-1, curYear-2];
+    const years   = [curYear, curYear-1, curYear-2, curYear-3, curYear-4];
     const opts    = years.map(y => `<option value="${y}">${y}</option>`).join('');
     el.innerHTML = opts;
     el.addEventListener('change', renderStatistiky);
+    var spSel = document.getElementById('stats-filter-species');
+    if (spSel && spSel.options.length <= 1) {
+        CATCH_SPECIES.forEach(function(sp) {
+            var o = document.createElement('option');
+            o.value = sp.id;
+            o.textContent = 'Jen s úlovky: ' + sp.label;
+            spSel.appendChild(o);
+        });
+    }
+}
+
+var statsFiltersBound = false;
+function bindStatsFiltersOnce() {
+    if (statsFiltersBound) return;
+    statsFiltersBound = true;
+    var nameEl = document.getElementById('stats-filter-name');
+    var spEl = document.getElementById('stats-filter-species');
+    var sortEl = document.getElementById('stats-sort');
+    if (nameEl) nameEl.addEventListener('input', function() { renderStatistiky(); });
+    if (spEl) spEl.addEventListener('change', function() { renderStatistiky(); });
+    if (sortEl) sortEl.addEventListener('change', function() { renderStatistiky(); });
 }
 
 // ════════════════════════════════════════
@@ -2353,6 +2441,7 @@ function renderAdminPinsList() {
 updateBiometricLoginVisibility();
 updateSyncBar();
 initYearSelectors();
+bindStatsFiltersOnce();
 initCatchSpeciesSelects();
 bindCatchLengthSpeciesHints('#catch-length', '#catch-length-hint', '#catch-species', syncAdminCatchKeptRow);
 bindCatchLengthSpeciesHints('#fisher-catch-length', '#fisher-catch-length-hint', '#fisher-catch-species', syncFisherCatchKeptRow);
