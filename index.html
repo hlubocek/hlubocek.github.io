@@ -322,6 +322,11 @@
                 <button type="button" class="btn btn-primary btn-full" id="btn-save-pin">Přidat PIN správce</button>
             </div>
             <div class="settings-section">
+                <h4>💾 Záloha dat</h4>
+                <p class="settings-desc">Stáhne kompletní JSON (držitelé, docházka, úlovky, návštěvy). V tomto prohlížeči se automaticky drží posledních 10 snímků (klíče <code class="settings-desc">hlb_backup_*</code>). Před smazáním celé databáze se záloha vždy nabídne ke stažení.</p>
+                <button type="button" class="btn btn-secondary btn-full" id="btn-download-backup">Stáhnout zálohu (JSON)</button>
+            </div>
+            <div class="settings-section">
                 <h4>🔥 Firebase – sdílení dat</h4>
                 <p class="settings-desc">Bez Firebase jsou data jen v tomto prohlížeči. S Firebase jsou <strong>stejná data u všech zařízení</strong> v reálném čase. Pokud připojení nefunguje, v Firebase Console nastavte pravidla (Rules) – viz soubor FIREBASE-SETUP.md v projektu.</p>
                 <div id="firebase-status" class="firebase-status-box"></div>

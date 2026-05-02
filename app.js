@@ -51,8 +51,11 @@ const LS = {
     ADMIN_PIN: 'hlb_admin_pin',
     FISHER_ID: 'hlb_fisher_id',
     WEBAUTHN:  'hlb_webauthn',
-    LAST_VIEW: 'hlb_last_view'  // 'admin' | 'fisher' – při obnovení stránky zachovat zobrazení
+    LAST_VIEW: 'hlb_last_view',  // 'admin' | 'fisher' – při obnovení stránky zachovat zobrazení
+    BACKUPS_INDEX: 'hlb_backups_index'  // pole klíčů hlb_backup_<timestamp>
 };
+/** Kolik posledních kompletních záloh držet v localStorage (navíc ke staženým souborům). */
+const LOCAL_BACKUP_MAX = 10;
 
 // ════════════════════════════════════════
 // DATA VRSTVA
@@ -108,24 +111,24 @@ function visitorsFromDb(val) {
     return firebaseValToRecords(val).map(normalizeVisitorDoc).filter(Boolean);
 }
 
-/** True když RTDB vrací prázdný uzel (null / {} / []). */
-function isVisitorsRemoteEmpty(val) {
-    if (val == null) return true;
-    if (Array.isArray(val)) return val.length === 0;
-    if (typeof val === 'object') return Object.keys(val).length === 0;
-    return true;
-}
 /**
- * Když je v cloudu visitors prázdné, ale v localStorage ještě něco je (např. dřív přepsané null z RTDB),
- * použije se mezipaměť — jinak by seznam vypadal prázdný i při existujících zálohovaných řádcích.
+ * Sloučí návštěvy podle id: nejdřív místní, pak přepíše hodnotami z cloudu (stejné id).
+ * Zachová záznamy, které jsou jen v prohlížeči a v RTDB chybí — nic se nezahodí.
  */
-function resolveVisitorsFromRemoteAndLocal(remoteVal) {
-    var fromRemote = visitorsFromDb(remoteVal);
-    if (fromRemote.length) return { list: fromRemote, recoveredFromLocal: false };
-    if (!isVisitorsRemoteEmpty(remoteVal)) return { list: fromRemote, recoveredFromLocal: false };
-    var fromLocal = visitorsFromDb(lsLoad(LS.VISITORS));
-    if (fromLocal.length) return { list: fromLocal, recoveredFromLocal: true };
-    return { list: [], recoveredFromLocal: false };
+function mergeVisitorListsById(remoteList, localList) {
+    var map = {};
+    localList.forEach(function(v) {
+        if (v && v.id) map[v.id] = normalizeVisitorDoc(v);
+    });
+    remoteList.forEach(function(v) {
+        if (v && v.id) map[v.id] = normalizeVisitorDoc(v);
+    });
+    return Object.keys(map).map(function(k) { return map[k]; });
+}
+function visitorsNeedFirebaseUpload(fromRemote, merged) {
+    if (!merged.length) return false;
+    if (!fromRemote.length) return true;
+    return merged.length > fromRemote.length;
 }
 function pushVisitorsToFirebase(list) {
     if (!fbReady || !db || !list || !list.length) return Promise.resolve();
@@ -137,17 +140,84 @@ function pushVisitorsToFirebase(list) {
     if (!Object.keys(updates).length) return Promise.resolve();
     return db.ref().update(updates).catch(function(err) { console.error('pushVisitorsToFirebase', err); });
 }
-/** Nastaví globální visitors + uloží do LS; volitelně znovu nahraje obnovené řádky do RTDB. */
-function applyVisitorsSnapshot(remoteVal, autoPushIfRecovered) {
-    var res = resolveVisitorsFromRemoteAndLocal(remoteVal);
-    visitors = res.list;
+/** Nastaví globální visitors + uloží do LS; při rozdílu místní vs. remote doplní Firebase (sloučený stav). */
+function applyVisitorsSnapshot(remoteVal, autoPushIfNeeded) {
+    var fromRemote = visitorsFromDb(remoteVal);
+    var fromLocal = visitorsFromDb(lsLoad(LS.VISITORS));
+    var merged = mergeVisitorListsById(fromRemote, fromLocal);
+    visitors = merged;
     lsSave(LS.VISITORS, visitors);
-    if (res.recoveredFromLocal && autoPushIfRecovered) {
+    if (autoPushIfNeeded && visitorsNeedFirebaseUpload(fromRemote, merged)) {
         pushVisitorsToFirebase(visitors).then(function() {
-            if (visitors.length) showToast('Návštěvy obnovené z mezipaměti prohlížeče a znovu uložené do databáze.', 'success');
+            if (visitors.length) showToast('Návštěvy sloučeny (prohlížeč + databáze) a uloženy do Firebase.', 'success');
         });
     }
-    return res;
+    return { merged: merged, fromRemote: fromRemote };
+}
+
+// ════════════════════════════════════════
+// ZÁLOHY (JSON + rotující kopie v localStorage)
+// ════════════════════════════════════════
+function collectFullBackupPayload() {
+    return {
+        exportedAt: new Date().toISOString(),
+        app: 'rybari-registrace-hlubocek',
+        schemaVersion: 1,
+        fishers: fishers.slice(),
+        checkins: checkins.slice(),
+        catches: catches.slice(),
+        visitors: visitors.slice()
+    };
+}
+/** Uloží kompletní snímek do rotující fronty v localStorage (ničí nejstarší po LOCAL_BACKUP_MAX). */
+function saveRollingLocalBackup(reason) {
+    try {
+        var payload = collectFullBackupPayload();
+        payload.backupReason = reason || '';
+        var json = JSON.stringify(payload);
+        if (json.length > 4e6) {
+            console.warn('Záloha příliš velká pro localStorage, přeskočeno.');
+            return null;
+        }
+        var id = 'hlb_backup_' + Date.now();
+        localStorage.setItem(id, json);
+        var idx = [];
+        try { idx = JSON.parse(localStorage.getItem(LS.BACKUPS_INDEX) || '[]'); } catch (_) { idx = []; }
+        if (!Array.isArray(idx)) idx = [];
+        idx.push(id);
+        while (idx.length > LOCAL_BACKUP_MAX) {
+            var old = idx.shift();
+            try { localStorage.removeItem(old); } catch (_) {}
+        }
+        localStorage.setItem(LS.BACKUPS_INDEX, JSON.stringify(idx));
+        return id;
+    } catch (e) {
+        console.error('saveRollingLocalBackup', e);
+        return null;
+    }
+}
+function downloadBackupJson(reason) {
+    var payload = collectFullBackupPayload();
+    payload.backupReason = reason || 'manual_download';
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
+    var a = document.createElement('a');
+    var fname = 'hlubocek-zaloha-' + payload.exportedAt.slice(0, 19).replace(/[:]/g, '-').replace('T', '_') + '.json';
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    saveRollingLocalBackup(reason || 'manual_download');
+    showToast('Záloha stažena. Kopie je také mezi posledními ' + LOCAL_BACKUP_MAX + ' zálohami v tomto prohlížeči.', 'success');
+}
+/** Před zničením dat v RTDB – stažení JSON + rotující kopie (volat jen po kliknutí uživatele). */
+function backupBeforeDestructiveAction(reason) {
+    try {
+        downloadBackupJson(reason || 'pred_smazanim');
+    } catch (e) {
+        console.error('backupBeforeDestructiveAction', e);
+    }
 }
 
 function initFirebase(dbUrl, apiKey) {
@@ -223,6 +293,7 @@ function setupListeners() {
         lsSave(LS.FISHERS, fishers); lsSave(LS.CHECKINS, checkins); lsSave(LS.CATCHES, catches); lsSave(LS.VISITORS, visitors);
         updateSyncBar();
         rerender();
+        try { saveRollingLocalBackup('po_sync_rtdb'); } catch (_) {}
     }).catch(function() {});
     db.ref('config/webauthnCredentials').once('value').then(function(s) {
         var v = s.val();
@@ -1361,6 +1432,7 @@ function renderStatistiky() {
             <div class="stat-card"><div class="stat-value">${yearVisitors.length}</div><div class="stat-label">Návštěv</div></div>
             <div class="stat-card"><div class="stat-value">${totalVisitFee ? totalVisitFee+' Kč' : '—'}</div><div class="stat-label">Za návštěvy</div></div>
         </div>
+        <p class="form-hint" style="margin:.85rem 0 0;line-height:1.45;max-width:36rem;"><strong>Příchody</strong> jsou záznamy ze záložky Docházka; <strong>návštěvy</strong> jsou hosté zapsaní v záložce Návštěvy (jméno a poplatek). Součty v této tabulce nelze „rozvinout“ na jednotlivé řádky zpět — pracuje se se stejnými daty jako v přehledech. Pravidelně stahujte zálohu v nastavení.</p>
         ${fisherStats.length ? fisherStats.map(s => `
             <div class="fisher-stats-card">
                 <div class="fsc-header">
@@ -1468,6 +1540,8 @@ function updateFbStatusBox() {
 }
 
 $('#btn-open-settings').addEventListener('click', openSettings);
+var btnDlBackup = document.getElementById('btn-download-backup');
+if (btnDlBackup) btnDlBackup.addEventListener('click', function() { downloadBackupJson('nastaveni_rucni'); });
 
 $('#btn-save-firebase').addEventListener('click', () => {
     const url = $('#settings-firebase-url').value.trim();
@@ -1495,7 +1569,8 @@ $('#btn-disconnect-firebase').addEventListener('click', () => {
 
 $('#btn-clear-all-data').addEventListener('click', function() {
     if (!isAdminMode() || !fbReady || !db) return;
-    if (!confirm('Opravdu smazat VŠECHNA data z databáze?\n\n• Všechny osoby s povolenkou\n• Všechny úlovky\n• Veškerá docházka\n• Všechny návštěvy\n\nPIN a nastavení zůstanou. Tuto akci nelze vrátit.')) return;
+    backupBeforeDestructiveAction('pred_smazanim_vseho');
+    if (!confirm('Zkontrolujte složku Stažené soubory — měl se uložit JSON zálohy.\n\nPokračovat ve smazání VŠECH dat z databáze?\n\n• Všechny osoby s povolenkou\n• Všechny úlovky\n• Veškerá docházka\n• Všechny návštěvy\n\nPIN a nastavení zůstanou. Bez zálohy nepokračujte.')) return;
     if (!confirm('Naposledy: opravdu smazat všechna data?')) return;
     showToast('Mažu data…', 'info');
     Promise.all([
