@@ -630,11 +630,25 @@ navBtns.forEach(b => b.addEventListener('click', () => switchView(b.dataset.view
 // ── Toast ──
 let toastTimer;
 function showToast(msg, type) {
-    const t = $('#toast');
-    t.textContent = msg;
-    t.className = 'toast show' + (type ? ' toast-' + type : '');
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { t.className = 'toast'; }, 3000);
+    try {
+        var t = document.getElementById('toast');
+        if (!t) { console.warn('showToast: chybí #toast', msg); return; }
+        t.textContent = msg;
+        t.className = 'toast show' + (type ? ' toast-' + type : '');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function() { t.className = 'toast'; }, 3000);
+    } catch (e) { console.warn('showToast', e); }
+}
+function setLoginStatus(msg, isError) {
+    try {
+        var el = document.getElementById('login-status');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.className = 'login-status' + (isError ? ' is-error' : '');
+    } catch (_) {}
+}
+function clearLoginStatus() {
+    setLoginStatus('', false);
 }
 
 // ── Modals ──
@@ -1206,6 +1220,7 @@ function showLoginScreen() {
     if (pinInput) { pinInput.value = ''; pinInput.disabled = false; setTimeout(function() { pinInput.focus(); }, 100); }
     var submitBtn = $('#login-submit');
     if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Přihlásit'; }
+    clearLoginStatus();
     updateBiometricLoginVisibility();
     if (fbReady && db) {
         ensureLoginDataFromFirebase().then(function() {
@@ -1911,16 +1926,21 @@ $('#btn-clear-all-data').addEventListener('click', function() {
 });
 
 // ════════════════════════════════════════
-// LOGIN HANDLER
+// LOGIN HANDLER (sync preventDefault + async tělo — spolehlivější v Edge / InPrivate)
 // ════════════════════════════════════════
-var loginBiometricBtn = $('#login-biometric');
+var loginBiometricBtn = document.getElementById('login-biometric');
 if (loginBiometricBtn) loginBiometricBtn.addEventListener('click', function() { webauthnAuthenticate(); });
-var loginFormEl = $('#login-form');
-if (loginFormEl) loginFormEl.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    var pin = $('#login-pin').value.replace(/\D/g, '');
-    if (!pin) { showToast('Zadejte PIN (číslice)', 'warning'); return; }
-    var btn = $('#login-submit');
+
+async function doLoginPinFlow() {
+    var pinEl = document.getElementById('login-pin');
+    var pin = (pinEl && pinEl.value) ? pinEl.value.replace(/\D/g, '') : '';
+    if (!pin) {
+        setLoginStatus('Zadejte PIN (6 číslic držitel, 4–8 správce).', true);
+        showToast('Zadejte PIN (číslice)', 'warning');
+        return;
+    }
+    clearLoginStatus();
+    var btn = document.getElementById('login-submit');
     if (btn) { btn.disabled = true; btn.textContent = 'Ověřuji…'; }
     try {
         await ensureLoginDataFromFirebaseOrTimeout();
@@ -1955,33 +1975,60 @@ if (loginFormEl) loginFormEl.addEventListener('submit', async function(e) {
         if (isAdmin && fisher) {
             pendingLoginFisher = fisher;
             openModal(modals.loginChoice);
+            clearLoginStatus();
         } else if (isAdmin) {
             try { localStorage.removeItem(LS.FISHER_ID); } catch (_) {}
             showAdminView();
             showToast('Přihlášení: režim správce', 'success');
+            clearLoginStatus();
         } else if (fisher) {
             showFisherView(fisher);
             showToast('Vítejte, ' + fisher.name, 'success');
+            clearLoginStatus();
         } else {
+            setLoginStatus('PIN neodpovídá žádnému účtu v evidenci.', true);
             showToast('Nesprávný PIN', 'danger');
         }
     } catch (err) {
         console.error(err);
         var em = err && err.message ? String(err.message) : '';
         if (em.indexOf('HTTPS') >= 0 || em.indexOf('zabezpečen') >= 0) {
+            setLoginStatus(em, true);
             showToast(em, 'danger');
         } else if (!window.crypto || !window.crypto.subtle) {
+            setLoginStatus('Otevřete stránku přes HTTPS (hlubocek.github.io).', true);
             showToast('PIN vyžaduje HTTPS – otevřete https://hlubocek.github.io', 'danger');
         } else {
-            showToast('Chyba při ověření', 'danger');
+            setLoginStatus(em || 'Chyba při ověření. Zkuste znovu.', true);
+            showToast(em || 'Chyba při ověření', 'danger');
         }
     }
     if (btn) { btn.disabled = false; btn.textContent = 'Přihlásit'; }
-    $('#login-pin').value = '';
-});
+    if (pinEl) pinEl.value = '';
+}
+
+function onLoginFormSubmit(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    void doLoginPinFlow();
+}
+
+var loginFormEl = document.getElementById('login-form');
+if (loginFormEl) loginFormEl.addEventListener('submit', onLoginFormSubmit);
+
+var loginPinField = document.getElementById('login-pin');
+if (loginPinField) {
+    loginPinField.addEventListener('keydown', function(e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        var f = document.getElementById('login-form');
+        if (f && typeof f.requestSubmit === 'function') f.requestSubmit();
+        else onLoginFormSubmit(e);
+    });
+}
 
 // Pending login choice (když PIN platí pro oba režimy)
-$('#login-choice-admin').addEventListener('click', function() {
+var loginChoiceAdminBtn = document.getElementById('login-choice-admin');
+if (loginChoiceAdminBtn) loginChoiceAdminBtn.addEventListener('click', function() {
     if (pendingLoginFisher) {
         try { localStorage.removeItem(LS.FISHER_ID); } catch (_) {}
         showAdminView();
@@ -1990,7 +2037,8 @@ $('#login-choice-admin').addEventListener('click', function() {
         pendingLoginFisher = null;
     }
 });
-$('#login-choice-fisher').addEventListener('click', function() {
+var loginChoiceFisherBtn = document.getElementById('login-choice-fisher');
+if (loginChoiceFisherBtn) loginChoiceFisherBtn.addEventListener('click', function() {
     if (pendingLoginFisher) {
         showFisherView(pendingLoginFisher);
         showToast('Vítejte, ' + pendingLoginFisher.name, 'success');

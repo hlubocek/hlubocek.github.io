@@ -26,6 +26,15 @@
     opacity: 0.65;
 }
 #login-pin:focus { outline: none; border-color: var(--primary); }
+.login-status {
+    min-height: 1.35rem;
+    margin: .35rem 0 0;
+    font-size: .82rem;
+    line-height: 1.35;
+    color: var(--text-secondary);
+    text-align: center;
+}
+.login-status.is-error { color: var(--danger); font-weight: 600; }
 .login-footer { font-size: .75rem; color: var(--text-secondary); margin-top: 1rem; opacity: .9; }
 .btn-biometric { font-size: .95rem; }
 .fisher-security-row { margin-top: 1rem; display: flex; flex-direction: column; gap: .5rem; }
