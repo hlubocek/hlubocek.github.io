@@ -71,6 +71,7 @@ let cachedAdminPinHashes = [];
 let cachedAdminNames = {};
 let cachedWebauthnCredentials = {};  // { credentialIdBase64: fisherId }
 let pendingLoginFisher = null;  // při přihlášení PINem platném pro oba režimy
+var pendingBackupRestoreMode = null;  // 'merge' | 'replace' před výběrem souboru zálohy
 
 /** Načte pole z localStorage – Firebase ukládá i mapu {id: záznam}, musí být Object.values. */
 function lsLoad(k) {
@@ -218,6 +219,170 @@ function backupBeforeDestructiveAction(reason) {
     } catch (e) {
         console.error('backupBeforeDestructiveAction', e);
     }
+}
+
+function backupPayloadToArrays(payload) {
+    function arr(x) {
+        if (Array.isArray(x)) return x.slice();
+        if (x && typeof x === 'object') return Object.values(x);
+        return [];
+    }
+    var vis = arr(payload.visitors).map(function(v) { return normalizeVisitorDoc(v); }).filter(Boolean);
+    return {
+        fishers: arr(payload.fishers),
+        checkins: arr(payload.checkins),
+        catches: arr(payload.catches),
+        visitors: vis
+    };
+}
+function validateBackupPayload(payload) {
+    if (!payload || typeof payload !== 'object') return false;
+    var a = backupPayloadToArrays(payload);
+    return a.fishers.length + a.checkins.length + a.catches.length + a.visitors.length > 0;
+}
+/** Sloučení záznamů podle id: stávající, pak přepíše hodnotami ze zálohy (stejné id). */
+function mergeRecordArraysById(existing, incoming) {
+    var map = {};
+    existing.forEach(function(x) {
+        if (x && x.id) map[x.id] = Object.assign({}, x);
+    });
+    incoming.forEach(function(x) {
+        if (!x || !x.id) return;
+        map[x.id] = Object.assign({}, map[x.id] || {}, x);
+    });
+    return Object.keys(map).map(function(k) { return map[k]; });
+}
+function persistCollectionsToLocalStorage() {
+    lsSave(LS.FISHERS, fishers);
+    lsSave(LS.CHECKINS, checkins);
+    lsSave(LS.CATCHES, catches);
+    lsSave(LS.VISITORS, visitors);
+}
+function buildFirebaseSyncUpdates() {
+    var updates = {};
+    fishers.forEach(function(f) { if (f && f.id) updates['fishers/' + f.id] = f; });
+    checkins.forEach(function(c) { if (c && c.id) updates['checkins/' + c.id] = c; });
+    catches.forEach(function(c) { if (c && c.id) updates['catches/' + c.id] = c; });
+    visitors.forEach(function(v) { if (v && v.id) updates['visitors/' + v.id] = v; });
+    return updates;
+}
+/** Firebase multi-path update po částech (limity velikosti požadavku). */
+function firebaseMultiPathUpdateChunked(updates) {
+    if (!fbReady || !db) return Promise.resolve();
+    var keys = Object.keys(updates);
+    if (!keys.length) return Promise.resolve();
+    var CHUNK = 350;
+    var chain = Promise.resolve();
+    for (var i = 0; i < keys.length; i += CHUNK) {
+        (function(slice) {
+            chain = chain.then(function() {
+                var batch = {};
+                for (var j = 0; j < slice.length; j++) {
+                    batch[slice[j]] = updates[slice[j]];
+                }
+                return db.ref().update(batch);
+            });
+        })(keys.slice(i, i + CHUNK));
+    }
+    return chain;
+}
+function offerFirebaseSyncAfterRestore() {
+    if (!fbReady || !db) {
+        showToast('Data obnovena v tomto prohlížeči (Firebase nepřipojena).', 'success');
+        return Promise.resolve();
+    }
+    if (!confirm('Odeslat obnovená data do Firebase?\n\nDoporučeno — jinak může příští synchronizace z cloudu přepsat obnovené záznamy staršími kopiemi.')) {
+        showToast('Obnova jen lokálně. Později použijte „Obnovit data“ nebo znovu připojte Firebase a odešlete zálohu.', 'warning');
+        return Promise.resolve();
+    }
+    return firebaseMultiPathUpdateChunked(buildFirebaseSyncUpdates()).then(function() {
+        showToast('Obnova dokončena a uložena do Firebase.', 'success');
+    }).catch(function(err) {
+        console.error(err);
+        showToast('Obnova je uložena lokálně, upload do Firebase se nepovedl.', 'danger');
+    });
+}
+function runRestoreFromParsedPayload(payload, mode) {
+    if (!isAdminMode()) { showToast('Obnovení je dostupné v režimu správce.', 'warning'); return; }
+    if (!validateBackupPayload(payload)) { showToast('Neplatná nebo prázdná záloha.', 'danger'); return; }
+    if (mode === 'merge') {
+        if (!confirm('Sloučit zálohu do stávajících dat? (Stejná id se přepíšou hodnotami ze zálohy, nová id se doplní.)')) return;
+    } else if (mode === 'replace') {
+        if (!confirm('Nahradit všechna lokální data (držitelé, docházka, úlovky, návštěvy) touto zálohou?')) return;
+    }
+    var a = backupPayloadToArrays(payload);
+    if (mode === 'replace') {
+        fishers = a.fishers.slice();
+        checkins = a.checkins.slice();
+        catches = a.catches.slice();
+        visitors = a.visitors.slice();
+    } else {
+        fishers = mergeRecordArraysById(fishers, a.fishers);
+        checkins = mergeRecordArraysById(checkins, a.checkins);
+        catches = mergeRecordArraysById(catches, a.catches);
+        visitors = mergeVisitorListsById(a.visitors, visitors);
+    }
+    persistCollectionsToLocalStorage();
+    try { saveRollingLocalBackup('po_obnove'); } catch (_) {}
+    rerender();
+    updateSyncBar();
+    offerFirebaseSyncAfterRestore();
+}
+function runRestoreFromStorageKey(storageKey, mode) {
+    if (!isAdminMode()) { showToast('Obnovení je dostupné v režimu správce.', 'warning'); return; }
+    var raw = localStorage.getItem(storageKey);
+    if (!raw) { showToast('Tento snímek už v prohlížeči není.', 'danger'); return; }
+    try {
+        var payload = JSON.parse(raw);
+        runRestoreFromParsedPayload(payload, mode);
+    } catch (e) {
+        console.error(e);
+        showToast('Snímek nelze načíst.', 'danger');
+    }
+}
+function renderSettingsBackupsList() {
+    var box = document.getElementById('settings-backups-list');
+    if (!box) return;
+    var idx = [];
+    try { idx = JSON.parse(localStorage.getItem(LS.BACKUPS_INDEX) || '[]'); } catch (_) { idx = []; }
+    if (!Array.isArray(idx) || !idx.length) {
+        box.innerHTML = '<p class="form-hint">Zatím žádné automatické snímky. Po synchronizaci nebo stažení zálohy se začnou ukládat.</p>';
+        return;
+    }
+    var parts = [];
+    idx.slice().reverse().forEach(function(key) {
+        var raw = localStorage.getItem(key);
+        if (!raw) return;
+        var meta = key;
+        try {
+            var p = JSON.parse(raw);
+            var ar = backupPayloadToArrays(p);
+            var n = ar.fishers.length + ar.checkins.length + ar.catches.length + ar.visitors.length;
+            meta = (p.exportedAt || '').replace('T', ' ').slice(0, 19) + ' · ' + n + ' záznamů' + (p.backupReason ? ' · ' + String(p.backupReason) : '');
+        } catch (_) {}
+        parts.push(
+            '<div class="pin-item" style="flex-wrap:wrap;gap:.35rem;align-items:center;">' +
+            '<span class="pin-item-name" style="flex:1;min-width:10rem;font-size:.82rem;">' + esc(meta) + '</span>' +
+            '<button type="button" class="btn btn-secondary btn-sm backup-local-merge" data-backup-key="' + esc(key) + '">Sloučit</button>' +
+            '<button type="button" class="btn btn-secondary btn-sm backup-local-replace" data-backup-key="' + esc(key) + '">Nahradit</button>' +
+            '</div>'
+        );
+    });
+    box.innerHTML = parts.length ? parts.join('') : '<p class="form-hint">Žádné platné snímky.</p>';
+    box.querySelectorAll('.backup-local-merge').forEach(function(btn) {
+        btn.onclick = function() {
+            var k = btn.getAttribute('data-backup-key');
+            if (k) runRestoreFromStorageKey(k, 'merge');
+            renderSettingsBackupsList();
+        };
+    });
+    box.querySelectorAll('.backup-local-replace').forEach(function(btn) {
+        btn.onclick = function() {
+            var k = btn.getAttribute('data-backup-key');
+            if (k) runRestoreFromStorageKey(k, 'replace');
+            renderSettingsBackupsList();
+        };
+    });
 }
 
 function initFirebase(dbUrl, apiKey) {
@@ -1526,6 +1691,9 @@ function openSettings() {
     renderAdminPinsList();
     renderSettingsBiometric();
     updateFbStatusBox();
+    var restoreWrap = document.getElementById('settings-restore-wrap');
+    if (restoreWrap) restoreWrap.style.display = isAdminMode() ? 'block' : 'none';
+    renderSettingsBackupsList();
     openModal(modals.settings);
     var modalEl = modals.settings && modals.settings.querySelector('.modal');
     if (modalEl) modalEl.scrollTop = 0;
@@ -1541,7 +1709,43 @@ function updateFbStatusBox() {
 
 $('#btn-open-settings').addEventListener('click', openSettings);
 var btnDlBackup = document.getElementById('btn-download-backup');
-if (btnDlBackup) btnDlBackup.addEventListener('click', function() { downloadBackupJson('nastaveni_rucni'); });
+if (btnDlBackup) btnDlBackup.addEventListener('click', function() { downloadBackupJson('nastaveni_rucni'); renderSettingsBackupsList(); });
+var btnRestoreMerge = document.getElementById('btn-restore-backup-merge');
+if (btnRestoreMerge) btnRestoreMerge.addEventListener('click', function() {
+    if (!isAdminMode()) { showToast('Obnovení je dostupné v režimu správce.', 'warning'); return; }
+    pendingBackupRestoreMode = 'merge';
+    var fin = document.getElementById('backup-restore-file');
+    if (fin) fin.click();
+});
+var btnRestoreReplace = document.getElementById('btn-restore-backup-replace');
+if (btnRestoreReplace) btnRestoreReplace.addEventListener('click', function() {
+    if (!isAdminMode()) { showToast('Obnovení je dostupné v režimu správce.', 'warning'); return; }
+    pendingBackupRestoreMode = 'replace';
+    var fin = document.getElementById('backup-restore-file');
+    if (fin) fin.click();
+});
+var backupRestoreFile = document.getElementById('backup-restore-file');
+if (backupRestoreFile) backupRestoreFile.addEventListener('change', function(e) {
+    var file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    var mode = pendingBackupRestoreMode;
+    pendingBackupRestoreMode = null;
+    if (!file || !mode) return;
+    if (!isAdminMode()) { showToast('Obnovení je dostupné v režimu správce.', 'warning'); return; }
+    var reader = new FileReader();
+    reader.onload = function() {
+        try {
+            var payload = JSON.parse(reader.result);
+            runRestoreFromParsedPayload(payload, mode);
+            renderSettingsBackupsList();
+        } catch (err) {
+            console.error(err);
+            showToast('Soubor nelze načíst jako platný JSON zálohy.', 'danger');
+        }
+    };
+    reader.onerror = function() { showToast('Chyba čtení souboru.', 'danger'); };
+    reader.readAsText(file, 'UTF-8');
+});
 
 $('#btn-save-firebase').addEventListener('click', () => {
     const url = $('#settings-firebase-url').value.trim();

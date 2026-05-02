@@ -322,9 +322,20 @@
                 <button type="button" class="btn btn-primary btn-full" id="btn-save-pin">Přidat PIN správce</button>
             </div>
             <div class="settings-section">
-                <h4>💾 Záloha dat</h4>
-                <p class="settings-desc">Stáhne kompletní JSON (držitelé, docházka, úlovky, návštěvy). V tomto prohlížeči se automaticky drží posledních 10 snímků (klíče <code class="settings-desc">hlb_backup_*</code>). Před smazáním celé databáze se záloha vždy nabídne ke stažení.</p>
+                <h4>💾 Záloha a obnova dat</h4>
+                <p class="settings-desc">Kompletní JSON (držitelé, docházka, úlovky, návštěvy). V prohlížeči se drží posledních 10 automatických snímků. Obnovení je jen v <strong>režimu správce</strong>.</p>
                 <button type="button" class="btn btn-secondary btn-full" id="btn-download-backup">Stáhnout zálohu (JSON)</button>
+                <input type="file" id="backup-restore-file" accept="application/json,.json" style="display:none" aria-hidden="true">
+                <div id="settings-restore-wrap" style="display:none;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border-light);">
+                    <p class="settings-desc" style="margin-bottom:.5rem;"><strong>Sloučit</strong> = doplní a aktualizuje podle <code>id</code> (bezpečnější). <strong>Nahradit lokálně</strong> = přepíše paměť prohlížeče zálohou (předtím si stáhněte aktuální JSON). Po obnově u připojené Firebase doporučujeme hned odeslat do databáze.</p>
+                    <div style="display:flex;flex-direction:column;gap:.45rem;">
+                        <button type="button" class="btn btn-secondary btn-full" id="btn-restore-backup-merge">Obnovit ze souboru — sloučit</button>
+                        <button type="button" class="btn btn-secondary btn-full" id="btn-restore-backup-replace">Obnovit ze souboru — nahradit lokálně</button>
+                    </div>
+                    <h4 style="margin:1rem 0 .4rem;font-size:1rem;">Snímky v tomto prohlížeči</h4>
+                    <p class="form-hint" style="margin-bottom:.5rem;">Nejnovější nahoře. Sloučení / náhrada + volitelné nahrání do Firebase.</p>
+                    <div id="settings-backups-list" class="admin-pins-list"></div>
+                </div>
             </div>
             <div class="settings-section">
                 <h4>🔥 Firebase – sdílení dat</h4>
