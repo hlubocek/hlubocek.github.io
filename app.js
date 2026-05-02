@@ -108,6 +108,48 @@ function visitorsFromDb(val) {
     return firebaseValToRecords(val).map(normalizeVisitorDoc).filter(Boolean);
 }
 
+/** True když RTDB vrací prázdný uzel (null / {} / []). */
+function isVisitorsRemoteEmpty(val) {
+    if (val == null) return true;
+    if (Array.isArray(val)) return val.length === 0;
+    if (typeof val === 'object') return Object.keys(val).length === 0;
+    return true;
+}
+/**
+ * Když je v cloudu visitors prázdné, ale v localStorage ještě něco je (např. dřív přepsané null z RTDB),
+ * použije se mezipaměť — jinak by seznam vypadal prázdný i při existujících zálohovaných řádcích.
+ */
+function resolveVisitorsFromRemoteAndLocal(remoteVal) {
+    var fromRemote = visitorsFromDb(remoteVal);
+    if (fromRemote.length) return { list: fromRemote, recoveredFromLocal: false };
+    if (!isVisitorsRemoteEmpty(remoteVal)) return { list: fromRemote, recoveredFromLocal: false };
+    var fromLocal = visitorsFromDb(lsLoad(LS.VISITORS));
+    if (fromLocal.length) return { list: fromLocal, recoveredFromLocal: true };
+    return { list: [], recoveredFromLocal: false };
+}
+function pushVisitorsToFirebase(list) {
+    if (!fbReady || !db || !list || !list.length) return Promise.resolve();
+    var updates = {};
+    for (var i = 0; i < list.length; i++) {
+        var v = list[i];
+        if (v && v.id) updates['visitors/' + v.id] = v;
+    }
+    if (!Object.keys(updates).length) return Promise.resolve();
+    return db.ref().update(updates).catch(function(err) { console.error('pushVisitorsToFirebase', err); });
+}
+/** Nastaví globální visitors + uloží do LS; volitelně znovu nahraje obnovené řádky do RTDB. */
+function applyVisitorsSnapshot(remoteVal, autoPushIfRecovered) {
+    var res = resolveVisitorsFromRemoteAndLocal(remoteVal);
+    visitors = res.list;
+    lsSave(LS.VISITORS, visitors);
+    if (res.recoveredFromLocal && autoPushIfRecovered) {
+        pushVisitorsToFirebase(visitors).then(function() {
+            if (visitors.length) showToast('Návštěvy obnovené z mezipaměti prohlížeče a znovu uložené do databáze.', 'success');
+        });
+    }
+    return res;
+}
+
 function initFirebase(dbUrl, apiKey) {
     try {
         if (!dbUrl || !apiKey) return false;
@@ -156,7 +198,7 @@ function setupListeners() {
     db.ref('fishers').on('value',  s => { fishers  = s.val() ? Object.values(s.val()) : []; lsSave(LS.FISHERS,  fishers);  updateSyncBar(); rerender(); });
     db.ref('checkins').on('value', s => { checkins = s.val() ? Object.values(s.val()) : []; lsSave(LS.CHECKINS, checkins); rerender(); });
     db.ref('catches').on('value',  s => { catches  = s.val() ? Object.values(s.val()) : []; lsSave(LS.CATCHES,  catches);  rerender(); });
-    db.ref('visitors').on('value', s => { visitors = visitorsFromDb(s.val()); lsSave(LS.VISITORS, visitors); rerender(); });
+    db.ref('visitors').on('value', s => { applyVisitorsSnapshot(s.val(), true); rerender(); });
     db.ref('activity').limitToLast(30).on('value', s => {
         var val = s.val();
         activity = val ? Object.keys(val).map(function(k) { var v = val[k]; v._key = k; return v; }) : [];
@@ -174,7 +216,7 @@ function setupListeners() {
         fishers  = ss[0].val() ? Object.values(ss[0].val()) : [];
         checkins = ss[1].val() ? Object.values(ss[1].val()) : [];
         catches  = ss[2].val() ? Object.values(ss[2].val()) : [];
-        visitors = visitorsFromDb(ss[3].val());
+        applyVisitorsSnapshot(ss[3].val(), false);
         var v = ss[4].val();
         if (Array.isArray(v)) cachedAdminPinHashes = v;
         else if (v && typeof v === 'object') cachedAdminPinHashes = Object.values(v);
@@ -216,7 +258,7 @@ function refetchAllFromFirebase() {
         fishers  = ss[0].val() ? Object.values(ss[0].val()) : [];
         checkins = ss[1].val() ? Object.values(ss[1].val()) : [];
         catches  = ss[2].val() ? Object.values(ss[2].val()) : [];
-        visitors = visitorsFromDb(ss[3].val());
+        applyVisitorsSnapshot(ss[3].val(), true);
         lsSave(LS.FISHERS, fishers); lsSave(LS.CHECKINS, checkins); lsSave(LS.CATCHES, catches); lsSave(LS.VISITORS, visitors);
         updateSyncBar();
         rerender();
@@ -1206,7 +1248,7 @@ function renderNavstevy() {
     if (!cont) return;
     var list = Array.isArray(visitors) ? visitors : visitorsFromDb(visitors);
     if (!list.length) {
-        cont.innerHTML = `<div class="empty-state"><span class="empty-icon">👥</span><p>Žádné záznamy návštěv.</p></div>`;
+        cont.innerHTML = `<div class="empty-state"><span class="empty-icon">👥</span><p>Žádné záznamy návštěv v databázi.</p><p class="form-hint" style="margin-top:.65rem;max-width:28rem;">Záznamy se ukládají do Firebase (stejně jako držitelé a docházka). Pokud tu nic není, buď se ještě nezapisovaly, nebo zůstaly jen v jiném prohlížeči / záloze. Po přidání návštěvy by se měla zobrazit všem po synchronizaci.</p></div>`;
         return;
     }
     const deduped = dedupeVisitors(list);
