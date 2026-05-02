@@ -216,6 +216,13 @@ function dedupeVisitors(arr) {
         return true;
     });
 }
+/** Kalendářní rok záznamu návštěvy: u nových z timestamp, u starších výhradně z date (YYYY-MM-DD). */
+function visitorRecordYear(v) {
+    if (!v) return '';
+    if (v.timestamp && typeof v.timestamp === 'string' && v.timestamp.length >= 4) return v.timestamp.slice(0, 4);
+    if (v.date && typeof v.date === 'string' && v.date.length >= 4) return v.date.slice(0, 4);
+    return '';
+}
 
 function rerender() {
     renderFishers();
@@ -1136,10 +1143,19 @@ function renderNavstevy() {
         return;
     }
     const deduped = dedupeVisitors(visitors);
-    const sorted  = [...deduped].sort((a,b) => b.date.localeCompare(a.date) || b.timestamp.localeCompare(a.timestamp));
-    const years   = [...new Set(sorted.map(v => v.timestamp?.slice(0,4)))].sort().reverse();
-    const selYear = $('#navstevy-year-sel')?.value || years[0];
-    const filtered  = sorted.filter(v => v.timestamp?.startsWith(selYear));
+    const sorted  = [...deduped].sort((a,b) => {
+        var d = b.date.localeCompare(a.date);
+        if (d !== 0) return d;
+        var ta = a.timestamp || '', tb = b.timestamp || '';
+        return tb.localeCompare(ta);
+    });
+    var years = [...new Set(sorted.map(v => visitorRecordYear(v)).filter(Boolean))].sort().reverse();
+    if (!years.length && sorted.length) {
+        years = [new Date().getFullYear().toString()];
+    }
+    var selYear = ($('#navstevy-year-sel') && $('#navstevy-year-sel').value) || years[0] || new Date().getFullYear().toString();
+    if (years.length && years.indexOf(selYear) < 0) selYear = years[0];
+    const filtered  = sorted.filter(v => visitorRecordYear(v) === selYear);
     const totalFee  = filtered.reduce((s,v) => s + (v.fee ?? FEE_VISIT), 0);
     const groups    = {};
     filtered.forEach(v => { if (!groups[v.date]) groups[v.date] = []; groups[v.date].push(v); });
@@ -1195,7 +1211,7 @@ function renderStatistiky() {
 
     const yearCheckins = checkins.filter(c => c.date?.startsWith(curYear));
     const yearCatches  = catches.filter(c => c.timestamp?.startsWith(curYear));
-    const yearVisitors = visitors.filter(v => v.timestamp?.startsWith(curYear));
+    const yearVisitors = visitors.filter(v => visitorRecordYear(v) === curYear);
     const totalVisitFee = yearVisitors.reduce((s,v) => s + (v.fee||0), 0);
 
     const maxVisits  = Math.max(1, ...fishers.map(f => yearCheckins.filter(c => c.fisherId===f.id).length));
