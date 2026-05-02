@@ -12,7 +12,8 @@
 .login-icon { font-size: 3rem; display: block; margin-bottom: .5rem; }
 .login-card h1 { font-size: 1.5rem; color: var(--primary); margin-bottom: .2rem; }
 .login-subtitle { font-size: .9rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
-.login-hint { font-size: .85rem; color: var(--text-secondary); margin-bottom: .75rem; }
+.login-hint { font-size: .88rem; color: var(--text); margin-bottom: .45rem; line-height: 1.45; }
+.login-hint-sub { font-size: .8rem; color: var(--text-secondary); margin-bottom: .85rem; line-height: 1.45; }
 /* type=tel + one-time-code: spolehlivější než type=password v Edge InPrivate */
 #login-pin {
     width: 100%; padding: .9rem 1rem; font-size: 1.25rem; text-align: center; letter-spacing: .35em;
