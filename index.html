@@ -121,6 +121,7 @@
                 </div>
             </div>
             <p id="admin-hint" class="admin-hint" style="display:none"></p>
+            <p id="fishers-name-preview-hint" class="form-hint fishers-preview-hint" style="display:none;">Klepněte na <strong>jméno</strong> držitele — zobrazí se stejný přehled (příchody, úlovky, návštěvy) jako po jeho přihlášení.</p>
             <div id="fishers-list" class="card-list"></div>
             <div id="no-fishers" class="empty-state">
                 <span class="empty-icon">👤</span>
@@ -414,6 +415,10 @@
                 <button class="header-settings-btn" id="fisher-logout" title="Odhlásit">🚪</button>
             </div>
         </header>
+        <div id="fisher-admin-preview-banner" class="fisher-admin-preview-banner" style="display:none;" role="region" aria-label="Náhled profilu správce">
+            <p class="fisher-admin-preview-text">Prohlížíte stejný přehled jako tento držitel po přihlášení (příchody, úlovky, návštěvy). Z odsud nelze zapisovat ani měnit účet — použijte tlačítko zpět.</p>
+            <button type="button" class="btn btn-primary btn-sm" id="fisher-btn-exit-admin-preview">← Zpět k evidenci</button>
+        </div>
         <main class="fisher-main">
             <div class="fisher-actions-grid">
                 <button class="btn btn-primary fisher-action-btn" id="fisher-btn-checkin">✓ Zapsat příchod</button>

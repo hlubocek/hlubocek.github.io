@@ -577,8 +577,16 @@ function rerender() {
     if (currentView === 'ulovky')     renderUlovky();
     if (currentView === 'navstevy')   renderNavstevy();
     if (currentView === 'statistiky') renderStatistiky();
-    var fisher = getLoggedInFisher();
-    if (fisher && $('#fisher-profile').offsetParent !== null) renderFisherProfile(fisher);
+    var fpVis = $('#fisher-profile');
+    if (fpVis && fpVis.offsetParent !== null) {
+        if (adminViewingFisherProfile && adminPreviewFisherId) {
+            var pf = fishers.find(function(x) { return x.id === adminPreviewFisherId; });
+            if (pf) renderFisherProfile(pf);
+        } else {
+            var fisher = getLoggedInFisher();
+            if (fisher) renderFisherProfile(fisher);
+        }
+    }
 }
 
 function dbSet(col, id, data) {
@@ -1300,6 +1308,8 @@ function populateFisherSelects() {
 // PŘIHLAŠOVÁNÍ A ZOBRAZENÍ
 // ════════════════════════════════════════
 function showLoginScreen() {
+    adminViewingFisherProfile = false;
+    adminPreviewFisherId = null;
     $('#login-screen').style.display = 'flex';
     $('#app-wrapper').style.display = 'none';
     $('#fisher-profile').style.display = 'none';
@@ -1329,12 +1339,33 @@ function showAdminView() {
     rerender();
 }
 function showFisherView(fisher) {
+    adminViewingFisherProfile = false;
+    adminPreviewFisherId = null;
     $('#login-screen').style.display = 'none';
     $('#app-wrapper').style.display = 'none';
     $('#fisher-profile').style.display = 'block';
     try { localStorage.setItem(LS.FISHER_ID, fisher.id); localStorage.setItem(LS.LAST_VIEW, 'fisher'); } catch (_) {}
     $('#fisher-profile-name').textContent = fisher.name;
     renderFisherProfile(fisher);
+}
+
+/** Náhled přehledu držitele (stejná data jako v jeho profilu) – pouze pro přihlášeného správce. */
+function showAdminFisherPreview(fisher) {
+    if (!fisher || !isAdminMode()) return;
+    adminViewingFisherProfile = true;
+    adminPreviewFisherId = fisher.id;
+    $('#login-screen').style.display = 'none';
+    $('#app-wrapper').style.display = 'none';
+    $('#fisher-profile').style.display = 'block';
+    try { localStorage.setItem(LS.LAST_VIEW, 'admin'); } catch (_) {}
+    $('#fisher-profile-name').textContent = fisher.name;
+    renderFisherProfile(fisher);
+}
+
+function exitAdminFisherPreview() {
+    adminViewingFisherProfile = false;
+    adminPreviewFisherId = null;
+    showAdminView();
 }
 function getLoggedInFisher() {
     try {
@@ -1348,6 +1379,8 @@ function getLoggedInFisher() {
 // RYBÁŘI
 // ════════════════════════════════════════
 let editingFisherId = null;
+var adminViewingFisherProfile = false;
+var adminPreviewFisherId = null;
 
 $('#btn-new-fisher').addEventListener('click', async () => {
     editingFisherId = null;
@@ -1433,6 +1466,8 @@ function renderFishers() {
             adminHint.innerHTML = 'Pro úpravu a mazání: <a href="#" id="link-admin-pin">zadejte PIN správce</a>.';
         }
     }
+    var namePreviewHint = $('#fishers-name-preview-hint');
+    if (namePreviewHint) namePreviewHint.style.display = (admin && fishers.length) ? 'block' : 'none';
 
     if (!fishers.length) {
         list.innerHTML = '';
@@ -1456,16 +1491,26 @@ function renderFishers() {
                 <button class="btn btn-secondary btn-sm" onclick="window._editFisher('${f.id}')">✏️</button>
                 <button class="btn btn-danger btn-sm" onclick="window._deleteFisher('${f.id}')">🗑</button>
             </div>` : '';
+        const nameCell = admin
+            ? `<div class="fisher-name"><button type="button" class="fisher-name-preview" onclick="event.stopPropagation();window._adminPreviewFisherProfile('${f.id}')" title="Stejný přehled jako po přihlášení tohoto držitele">${esc(f.name)}</button></div>`
+            : `<div class="fisher-name">${esc(f.name)}</div>`;
         return `<div class="fisher-card">
             <div class="fisher-avatar">${esc(initials(f.name))}</div>
             <div class="fisher-info">
-                <div class="fisher-name">${esc(f.name)}</div>
+                ${nameCell}
                 <div class="fisher-sub">${f.pinDisplay ? '🔑 PIN '+esc(f.pinDisplay)+' · ' : ''}${f.number ? '🪪 '+esc(f.number)+' · ' : ''}📅 ${yearCatches} úlovků letos${todayCI ? ' · <span style="color:var(--success);font-weight:700">✓ Dnes</span>' : ''}</div>
             </div>
             ${actions}
         </div>`;
     }).join('');
 }
+
+window._adminPreviewFisherProfile = function(id) {
+    if (!isAdminMode()) return;
+    var f = fishers.find(function(x) { return x.id === id; });
+    if (!f) return;
+    showAdminFisherPreview(f);
+};
 
 window._editFisher = function(id) {
     const f = fishers.find(x => x.id === id);
@@ -2252,10 +2297,14 @@ $('#link-switch-to-fisher').addEventListener('click', function(e) {
 
 // Přepnutí držitel → správce (ikona v headeru + tlačítko v obsahu)
 function doSwitchToAdmin() {
+    adminViewingFisherProfile = false;
+    adminPreviewFisherId = null;
     setAdminUnlocked(true);
     showAdminView();
     showToast('Přepnuto na režim správce', 'success');
 }
+var exitPreviewBtn = $('#fisher-btn-exit-admin-preview');
+if (exitPreviewBtn) exitPreviewBtn.addEventListener('click', exitAdminFisherPreview);
 $('#fisher-switch-admin').addEventListener('click', doSwitchToAdmin);
 var switchAdminMain = $('#fisher-btn-switch-admin');
 if (switchAdminMain) switchAdminMain.addEventListener('click', doSwitchToAdmin);
@@ -2265,15 +2314,27 @@ if (switchAdminMain) switchAdminMain.addEventListener('click', doSwitchToAdmin);
 // ════════════════════════════════════════
 function renderFisherProfile(fisher) {
     var fid = fisher.id;
-    updateFisherBiometricButtons(fisher);
+    var preview = adminViewingFisherProfile;
+    var banner = $('#fisher-admin-preview-banner');
+    if (banner) banner.style.display = preview ? 'flex' : 'none';
+    var headerBtns = document.querySelector('.fisher-header-btns');
+    if (headerBtns) headerBtns.style.display = preview ? 'none' : '';
+    var actionsGrid = document.querySelector('#fisher-profile .fisher-actions-grid');
+    if (actionsGrid) actionsGrid.style.display = preview ? 'none' : '';
+    var secRow = document.querySelector('#fisher-profile .fisher-security-row');
+    if (secRow) secRow.style.display = preview ? 'none' : '';
+    var podminkyF = $('#btn-podminky-fisher');
+    if (podminkyF) podminkyF.style.display = preview ? 'none' : '';
+
+    if (!preview) updateFisherBiometricButtons(fisher);
     var isAdmin = isFisherAlsoAdmin(fisher);
     var switchBtn = $('#fisher-switch-admin');
-    if (switchBtn) switchBtn.style.display = isAdmin ? '' : 'none';
+    if (switchBtn) switchBtn.style.display = (!preview && isAdmin) ? '' : 'none';
     var switchBtnMain = $('#fisher-btn-switch-admin');
-    if (switchBtnMain) switchBtnMain.style.display = isAdmin ? '' : 'none';
+    if (switchBtnMain) switchBtnMain.style.display = (!preview && isAdmin) ? '' : 'none';
     var settingsBtn = $('#fisher-settings');
     if (settingsBtn) {
-        var hasSettingsUse = isFisherAlsoAdmin(fisher) || isWebAuthnSupported();
+        var hasSettingsUse = !preview && (isFisherAlsoAdmin(fisher) || isWebAuthnSupported());
         settingsBtn.style.display = hasSettingsUse ? '' : 'none';
     }
     var myCheckins = dedupeCheckins(checkins.filter(function(c) { return c.fisherId === fid; })).sort(function(a,b) { return b.date.localeCompare(a.date); }).slice(0, 15);
