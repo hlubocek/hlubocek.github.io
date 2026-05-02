@@ -1288,7 +1288,8 @@ function makeQr(container, url, size) {
 // ── Naplnit všechny select držitelů povolenky ──
 function populateFisherSelects() {
     const sorted = [...fishers].sort((a,b) => a.name.localeCompare(b.name, 'cs'));
-    const opts   = sorted.map(f => `<option value="${f.id}">${esc(f.name)}</option>`).join('');
+    const head   = '<option value="">— Vyberte držitele —</option>';
+    const opts   = head + sorted.map(f => `<option value="${f.id}">${esc(f.name)}</option>`).join('');
     ['ci-fisher', 'catch-fisher', 'visit-fisher'].forEach(id => {
         const el = $('#' + id);
         if (el) el.innerHTML = opts;
@@ -1515,7 +1516,7 @@ window._deleteFisher = async function(id) {
 $('#btn-ci-submit').addEventListener('click', async function() {
     var fid  = $('#ci-fisher').value;
     var date = $('#ci-date').value;
-    if (!fid)  { showToast('Nejdříve přidejte osobu s povolenkou', 'warning'); return; }
+    if (!fid)  { showToast(fishers.length ? 'Vyberte držitele povolenky' : 'Nejdříve přidejte osobu s povolenkou', 'warning'); return; }
     if (!date) { showToast('Vyberte datum', 'warning'); return; }
     var already = checkins.find(function(c) { return c.fisherId === fid && c.date === date; });
     if (already) { showToast('Pro tento den je u této osoby příchod už zapsaný', 'warning'); return; }
@@ -1584,7 +1585,7 @@ $('#btn-catch-submit').addEventListener('click', async function() {
     var length = parseInt($('#catch-length').value, 10);
     var meta   = getCatchSpeciesMeta(speciesId);
     var kept   = catchSpeciesAllowsKept(meta.id) ? $('#catch-kept').checked : false;
-    if (!fid)                              { showToast('Nejdříve přidejte osobu s povolenkou', 'warning'); return; }
+    if (!fid)                              { showToast(fishers.length ? 'Vyberte držitele povolenky' : 'Nejdříve přidejte osobu s povolenkou', 'warning'); return; }
     if (!date)                             { showToast('Vyberte datum', 'warning'); return; }
     if (!length || length < 5 || length > 150) { showToast('Zadejte délku v cm (5–150)', 'warning'); return; }
     var id  = genId();
@@ -1671,7 +1672,7 @@ $('#btn-visit-submit').addEventListener('click', async function() {
     var fid         = $('#visit-fisher').value;
     var date        = $('#visit-date').value;
     var visitorName = $('#visit-name').value.trim();
-    if (!fid)         { showToast('Nejdříve přidejte osobu s povolenkou', 'warning'); return; }
+    if (!fid)         { showToast(fishers.length ? 'Vyberte držitele povolenky' : 'Nejdříve přidejte osobu s povolenkou', 'warning'); return; }
     if (!visitorName) { showToast('Zadejte jméno návštěvy', 'warning'); return; }
     if (!date)        { showToast('Vyberte datum', 'warning'); return; }
     var id  = genId();
