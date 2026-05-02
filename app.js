@@ -69,9 +69,44 @@ let cachedAdminNames = {};
 let cachedWebauthnCredentials = {};  // { credentialIdBase64: fisherId }
 let pendingLoginFisher = null;  // při přihlášení PINem platném pro oba režimy
 
-function lsLoad(k)    { try { return JSON.parse(localStorage.getItem(k)) || []; } catch { return []; } }
+/** Načte pole z localStorage – Firebase ukládá i mapu {id: záznam}, musí být Object.values. */
+function lsLoad(k) {
+    try {
+        var raw = localStorage.getItem(k);
+        if (raw == null || raw === '') return [];
+        var v = JSON.parse(raw);
+        if (Array.isArray(v)) return v;
+        if (v && typeof v === 'object') return Object.values(v);
+        return [];
+    } catch (_) { return []; }
+}
 function lsSave(k, d) { localStorage.setItem(k, JSON.stringify(d)); }
 function genId()      { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+/** Hodnota z Firebase RTDB (null | pole | mapa id → záznam) → pole záznamů. */
+function firebaseValToRecords(val) {
+    if (val == null) return [];
+    if (Array.isArray(val)) return val.slice();
+    if (typeof val === 'object') return Object.values(val);
+    return [];
+}
+/** Sjednotí jméno (visitorName / name) a datum (date / timestamp) u návštěvy. */
+function normalizeVisitorDoc(v) {
+    if (!v || typeof v !== 'object') return null;
+    var out = Object.assign({}, v);
+    var vn = out.visitorName != null ? String(out.visitorName).trim() : '';
+    if (!vn && out.name != null) vn = String(out.name).trim();
+    out.visitorName = vn || '—';
+    var dateStr = out.date != null ? String(out.date).trim().slice(0, 10) : '';
+    if (!dateStr && out.timestamp && typeof out.timestamp === 'string' && out.timestamp.length >= 10) {
+        dateStr = out.timestamp.slice(0, 10);
+    }
+    out.date = dateStr;
+    return out;
+}
+function visitorsFromDb(val) {
+    return firebaseValToRecords(val).map(normalizeVisitorDoc).filter(Boolean);
+}
 
 function initFirebase(dbUrl, apiKey) {
     try {
@@ -121,7 +156,7 @@ function setupListeners() {
     db.ref('fishers').on('value',  s => { fishers  = s.val() ? Object.values(s.val()) : []; lsSave(LS.FISHERS,  fishers);  updateSyncBar(); rerender(); });
     db.ref('checkins').on('value', s => { checkins = s.val() ? Object.values(s.val()) : []; lsSave(LS.CHECKINS, checkins); rerender(); });
     db.ref('catches').on('value',  s => { catches  = s.val() ? Object.values(s.val()) : []; lsSave(LS.CATCHES,  catches);  rerender(); });
-    db.ref('visitors').on('value', s => { visitors = s.val() ? Object.values(s.val()) : []; lsSave(LS.VISITORS, visitors); rerender(); });
+    db.ref('visitors').on('value', s => { visitors = visitorsFromDb(s.val()); lsSave(LS.VISITORS, visitors); rerender(); });
     db.ref('activity').limitToLast(30).on('value', s => {
         var val = s.val();
         activity = val ? Object.keys(val).map(function(k) { var v = val[k]; v._key = k; return v; }) : [];
@@ -139,7 +174,7 @@ function setupListeners() {
         fishers  = ss[0].val() ? Object.values(ss[0].val()) : [];
         checkins = ss[1].val() ? Object.values(ss[1].val()) : [];
         catches  = ss[2].val() ? Object.values(ss[2].val()) : [];
-        visitors = ss[3].val() ? Object.values(ss[3].val()) : [];
+        visitors = visitorsFromDb(ss[3].val());
         var v = ss[4].val();
         if (Array.isArray(v)) cachedAdminPinHashes = v;
         else if (v && typeof v === 'object') cachedAdminPinHashes = Object.values(v);
@@ -181,7 +216,7 @@ function refetchAllFromFirebase() {
         fishers  = ss[0].val() ? Object.values(ss[0].val()) : [];
         checkins = ss[1].val() ? Object.values(ss[1].val()) : [];
         catches  = ss[2].val() ? Object.values(ss[2].val()) : [];
-        visitors = ss[3].val() ? Object.values(ss[3].val()) : [];
+        visitors = visitorsFromDb(ss[3].val());
         lsSave(LS.FISHERS, fishers); lsSave(LS.CHECKINS, checkins); lsSave(LS.CATCHES, catches); lsSave(LS.VISITORS, visitors);
         updateSyncBar();
         rerender();
@@ -208,9 +243,12 @@ function dedupeCheckins(arr) {
     });
 }
 function dedupeVisitors(arr) {
+    if (!Array.isArray(arr) || !arr.length) return [];
     var seen = new Set();
     return arr.filter(function(v) {
-        var key = (v.fisherId || '') + '|' + (v.date || '') + '|' + (v.visitorName || '');
+        if (!v) return false;
+        var key = (v.id != null && String(v.id) !== '') ? ('id:' + String(v.id))
+            : ((v.fisherId || '') + '|' + (v.date || '') + '|' + (v.visitorName || ''));
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -1149,13 +1187,29 @@ $('#btn-visit-submit').addEventListener('click', async function() {
     }
 });
 
+function visitorGroupDateKey(v) {
+    var d = v.date && String(v.date).slice(0, 10);
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+    if (v.timestamp && typeof v.timestamp === 'string' && v.timestamp.length >= 10) {
+        var t = v.timestamp.slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+    }
+    return '__neurceno__';
+}
+function fmtVisitGroupHeader(dateKey) {
+    if (dateKey === '__neurceno__') return 'Bez data / neurčeno';
+    return fmtDate(dateKey);
+}
+
 function renderNavstevy() {
     const cont = $('#navstevy-content');
-    if (!visitors.length) {
+    if (!cont) return;
+    var list = Array.isArray(visitors) ? visitors : visitorsFromDb(visitors);
+    if (!list.length) {
         cont.innerHTML = `<div class="empty-state"><span class="empty-icon">👥</span><p>Žádné záznamy návštěv.</p></div>`;
         return;
     }
-    const deduped = dedupeVisitors(visitors);
+    const deduped = dedupeVisitors(list);
     const sorted  = [...deduped].sort((a,b) => {
         var da = a.date || '', db = b.date || '';
         var d = db.localeCompare(da);
@@ -1175,7 +1229,16 @@ function renderNavstevy() {
     }
     const totalFee  = filtered.reduce((s,v) => s + (v.fee ?? FEE_VISIT), 0);
     const groups    = {};
-    filtered.forEach(v => { if (!groups[v.date]) groups[v.date] = []; groups[v.date].push(v); });
+    filtered.forEach(function(v) {
+        var gk = visitorGroupDateKey(v);
+        if (!groups[gk]) groups[gk] = [];
+        groups[gk].push(v);
+    });
+    var groupEntries = Object.keys(groups).sort(function(a, b) {
+        if (a === '__neurceno__') return 1;
+        if (b === '__neurceno__') return -1;
+        return b.localeCompare(a);
+    }).map(function(k) { return [k, groups[k]]; });
 
     cont.innerHTML = `
         <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.85rem;flex-wrap:wrap;">
@@ -1184,9 +1247,9 @@ function renderNavstevy() {
             </select>
             <span style="font-size:.82rem;color:var(--text-secondary)">${filtered.length} návštěv · celkem <strong>${totalFee} Kč</strong></span>
         </div>
-        ${Object.entries(groups).map(([date, vs]) => `
+        ${groupEntries.map(([date, vs]) => `
             <div class="day-group">
-                <div class="day-label">${fmtDate(date)} (${vs.length}×)</div>
+                <div class="day-label">${fmtVisitGroupHeader(date)} (${vs.length}×)</div>
                 ${vs.map(v => {
                     const f = fishers.find(x => x.id === v.fisherId);
                     return `<div class="visit-row">
@@ -1708,7 +1771,7 @@ function renderAdminPinsList() {
 fishers  = lsLoad(LS.FISHERS);
 checkins = lsLoad(LS.CHECKINS);
 catches  = lsLoad(LS.CATCHES);
-visitors = lsLoad(LS.VISITORS);
+visitors = visitorsFromDb(lsLoad(LS.VISITORS));
 
 var storedUrl = localStorage.getItem(LS.FB_URL);
 var storedKey = localStorage.getItem(LS.FB_KEY);
