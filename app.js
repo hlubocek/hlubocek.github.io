@@ -683,6 +683,30 @@ function onLoginFormSubmit(e) {
     }
 })();
 
+// Data + Firebase hned po napojení přihlášení — když dál v souboru něco spadne na null u addEventListener,
+// bez tohoto by zůstaly prázdné fishers[] a PIN držitele by „nikdy nefungoval“.
+(function hlbBootstrapDataAndFirebase() {
+    try {
+        fishers  = lsLoad(LS.FISHERS);
+        checkins = lsLoad(LS.CHECKINS);
+        catches  = lsLoad(LS.CATCHES);
+        visitors = visitorsFromDb(lsLoad(LS.VISITORS));
+        var storedUrl = localStorage.getItem(LS.FB_URL);
+        var storedKey = localStorage.getItem(LS.FB_KEY);
+        var fbUrl = (storedUrl && storedUrl.trim()) ? storedUrl.trim() : FB_CONFIG.databaseURL;
+        var fbKey = (storedKey && storedKey.trim()) ? storedKey.trim() : FB_CONFIG.apiKey;
+        if (fbUrl && fbKey) initFirebase(fbUrl, fbKey);
+        if (!fbReady) {
+            try {
+                var w = localStorage.getItem(LS.WEBAUTHN);
+                if (w) { var o = JSON.parse(w); cachedWebauthnCredentials = (o && typeof o === 'object') ? o : {}; }
+            } catch (_) {}
+        }
+    } catch (e) {
+        console.warn('hlbBootstrapDataAndFirebase', e);
+    }
+})();
+
 // ── Modals ──
 const modals = {
     fisher:       $('#modal-fisher'),
@@ -696,12 +720,14 @@ const modals = {
 function openModal(m)  { if (m) m.classList.add('open');    document.body.style.overflow = 'hidden'; }
 function closeModal(m) { if (m) m.classList.remove('open'); document.body.style.overflow = ''; }
 // Zavírání jen tlačítkem ✕ nebo po odeslání – ne při kliknutí na pozadí (zabraňuje náhodnému zavření při přejetí myší)
-$('#modal-close-fisher').addEventListener('click',   () => closeModal(modals.fisher));
-$('#modal-close-qr').addEventListener('click',       () => closeModal(modals.qr));
-$('#modal-close-settings').addEventListener('click', () => closeModal(modals.settings));
-$('#modal-close-podminky').addEventListener('click', () => closeModal(modals.podminky));
-if ($('#modal-close-admin-pin')) $('#modal-close-admin-pin').addEventListener('click', () => closeModal(modals.adminPin));
-$('#btn-podminky').addEventListener('click', e => { e.preventDefault(); openModal(modals.podminky); });
+(function bindModalCloseGuards() {
+    var a = $('#modal-close-fisher');   if (a) a.addEventListener('click',   () => closeModal(modals.fisher));
+    var b = $('#modal-close-qr');       if (b) b.addEventListener('click',   () => closeModal(modals.qr));
+    var c = $('#modal-close-settings'); if (c) c.addEventListener('click', () => closeModal(modals.settings));
+    var d = $('#modal-close-podminky'); if (d) d.addEventListener('click', () => closeModal(modals.podminky));
+    var e = $('#modal-close-admin-pin'); if (e) e.addEventListener('click', () => closeModal(modals.adminPin));
+    var f = $('#btn-podminky');         if (f) f.addEventListener('click', ev => { ev.preventDefault(); openModal(modals.podminky); });
+})();
 if ($('#modal-close-login-choice')) $('#modal-close-login-choice').addEventListener('click', function() { pendingLoginFisher = null; closeModal(modals.loginChoice); });
 if ($('#modal-close-pick-fisher')) $('#modal-close-pick-fisher').addEventListener('click', () => closeModal(modals.pickFisher));
 
@@ -1234,7 +1260,7 @@ function updateSyncBar() {
         if (refreshWrap) refreshWrap.style.display = 'none';
     }
 }
-$('#btn-sync-setup').addEventListener('click', openSettings);
+{ var __bs = $('#btn-sync-setup'); if (__bs) __bs.addEventListener('click', openSettings); }
 
 // ── QR ──
 function makeQr(container, url, size) {
@@ -2055,6 +2081,14 @@ async function doLoginPinFlow() {
     if (btn) { btn.disabled = false; btn.textContent = 'Přihlásit'; }
     if (pinEl) pinEl.value = '';
 }
+window.hlbPinLogin = function() {
+    return doLoginPinFlow().catch(function(err) {
+        console.error('doLoginPinFlow', err);
+        var btn = document.getElementById('login-submit');
+        if (btn) { btn.disabled = false; btn.textContent = 'Přihlásit'; }
+        setLoginStatus('Neočekávaná chyba při přihlášení. Obnovte stránku (Ctrl+F5).', true);
+    });
+};
 
 // Pending login choice (když PIN platí pro oba režimy)
 var loginChoiceAdminBtn = document.getElementById('login-choice-admin');
@@ -2286,25 +2320,8 @@ function renderAdminPinsList() {
 }
 
 // ════════════════════════════════════════
-// INIT
+// INIT (data + Firebase už v hlbBootstrapDataAndFirebase u přihlášení)
 // ════════════════════════════════════════
-fishers  = lsLoad(LS.FISHERS);
-checkins = lsLoad(LS.CHECKINS);
-catches  = lsLoad(LS.CATCHES);
-visitors = visitorsFromDb(lsLoad(LS.VISITORS));
-
-var storedUrl = localStorage.getItem(LS.FB_URL);
-var storedKey = localStorage.getItem(LS.FB_KEY);
-var fbUrl = (storedUrl && storedUrl.trim()) ? storedUrl.trim() : FB_CONFIG.databaseURL;
-var fbKey = (storedKey && storedKey.trim()) ? storedKey.trim() : FB_CONFIG.apiKey;
-if (fbUrl && fbKey) initFirebase(fbUrl, fbKey);
-
-if (!fbReady) {
-    try {
-        var w = localStorage.getItem(LS.WEBAUTHN);
-        if (w) { var o = JSON.parse(w); cachedWebauthnCredentials = (o && typeof o === 'object') ? o : {}; }
-    } catch (_) {}
-}
 updateBiometricLoginVisibility();
 updateSyncBar();
 initYearSelectors();
