@@ -15,9 +15,15 @@
 .login-hint { font-size: .85rem; color: var(--text-secondary); margin-bottom: .75rem; }
 /* type=tel + one-time-code: spolehlivější než type=password v Edge InPrivate */
 #login-pin {
-    width: 100%; padding: .9rem 1rem; font-size: 1.25rem; text-align: center; letter-spacing: .4em;
+    width: 100%; padding: .9rem 1rem; font-size: 1.25rem; text-align: center; letter-spacing: .35em;
     border: 2px solid var(--border); border-radius: var(--radius-sm); margin-bottom: .75rem;
     font-family: monospace;
+}
+#login-pin::placeholder {
+    letter-spacing: normal;
+    font-family: system-ui, sans-serif;
+    font-size: 0.95rem;
+    opacity: 0.65;
 }
 #login-pin:focus { outline: none; border-color: var(--primary); }
 .login-footer { font-size: .75rem; color: var(--text-secondary); margin-top: 1rem; opacity: .9; }
@@ -501,7 +507,7 @@ main { max-width: 640px; margin: 0 auto; padding: 1rem; }
 .toast {
     position: fixed; bottom: 85px; left: 50%; transform: translateX(-50%) translateY(80px);
     background: var(--text); color: #fff; padding: .65rem 1.4rem; border-radius: 100px;
-    font-size: .88rem; font-weight: 500; box-shadow: var(--shadow-lg); z-index: 300;
+    font-size: .88rem; font-weight: 500; box-shadow: var(--shadow-lg); z-index: 5000;
     opacity: 0; transition: all .3s ease; white-space: nowrap; max-width: 90vw; text-align: center;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }

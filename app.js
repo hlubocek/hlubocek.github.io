@@ -665,7 +665,7 @@ async function doAdminLogin() {
     var pin = (pinEl && pinEl.value) ? pinEl.value.trim() : '';
     if (!pin) { showToast('Zadejte PIN', 'warning'); return; }
     try {
-        await ensureLoginDataFromFirebase();
+        await ensureLoginDataFromFirebaseOrTimeout();
         var r = await checkAdminPin(pin);
         if (!r.ok) { showToast(r.msg, 'danger'); return; }
         setAdminUnlocked(true);
@@ -919,6 +919,18 @@ async function ensureLoginDataFromFirebase() {
         console.warn('ensureLoginDataFromFirebase', e);
     }
 }
+/** Stejné jako ensureLoginDataFromFirebase, ale s časovým limitem (aby UI neviselo na „Ověřuji…“). */
+function ensureLoginDataFromFirebaseOrTimeout(ms) {
+    ms = ms || 14000;
+    return Promise.race([
+        ensureLoginDataFromFirebase(),
+        new Promise(function(_, reject) {
+            setTimeout(function() {
+                reject(new Error('Načtení dat pro přihlášení přesáhlo časový limit. Zkuste znovu nebo síť / blokování InPrivate.'));
+            }, ms);
+        })
+    ]);
+}
 function getAdminFishers() {
     var hashes = getAdminPinHashes();
     return fishers.filter(function(f) { return f.pinHash && hashes.indexOf(f.pinHash) >= 0; });
@@ -1091,7 +1103,7 @@ async function webauthnRegister(fisherId, fisherName) {
     }
 }
 async function webauthnAuthenticate() {
-    await ensureLoginDataFromFirebase();
+    await ensureLoginDataFromFirebaseOrTimeout();
     var creds = getWebauthnCredentials();
     var ids = Object.keys(creds);
     if (!ids.length) {
@@ -1901,15 +1913,17 @@ $('#btn-clear-all-data').addEventListener('click', function() {
 // ════════════════════════════════════════
 // LOGIN HANDLER
 // ════════════════════════════════════════
-$('#login-biometric').addEventListener('click', function() { webauthnAuthenticate(); });
-$('#login-form').addEventListener('submit', async function(e) {
+var loginBiometricBtn = $('#login-biometric');
+if (loginBiometricBtn) loginBiometricBtn.addEventListener('click', function() { webauthnAuthenticate(); });
+var loginFormEl = $('#login-form');
+if (loginFormEl) loginFormEl.addEventListener('submit', async function(e) {
     e.preventDefault();
     var pin = $('#login-pin').value.replace(/\D/g, '');
     if (!pin) { showToast('Zadejte PIN (číslice)', 'warning'); return; }
     var btn = $('#login-submit');
     if (btn) { btn.disabled = true; btn.textContent = 'Ověřuji…'; }
     try {
-        await ensureLoginDataFromFirebase();
+        await ensureLoginDataFromFirebaseOrTimeout();
         var h = await hashPin(pin);
         var adminHashes = getAdminPinHashes();
         if (!adminHashes.length && fbReady && db) {
