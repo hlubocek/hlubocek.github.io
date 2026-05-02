@@ -26,13 +26,13 @@
             <div class="login-icon">🎣</div>
             <h1>Hluboček</h1>
             <p class="login-subtitle">Evidence rybolovu</p>
-            <p class="login-hint">Zadejte PIN (držitel povolenky: 6 číslic, správce: 4–8)</p>
+            <p class="login-hint">Zadejte PIN (držitel povolenky: 6 číslic, správce: 4–8). PIN funguje vždy — otisk / Face ID je jen zkratka a v anonymním okně nemusí být k dispozici.</p>
             <form id="login-form" novalidate>
-                <input type="password" id="login-pin" inputmode="numeric" maxlength="8" placeholder="••••••" autocomplete="off" autofocus>
+                <input type="tel" id="login-pin" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="např. 123456" autocomplete="one-time-code" autocorrect="off" spellcheck="false" autofocus class="login-pin-input">
                 <button type="submit" class="btn btn-primary btn-full" id="login-submit">Přihlásit</button>
                 <button type="button" class="btn btn-secondary btn-full btn-biometric" id="login-biometric" style="display:none;margin-top:.5rem;">👆 Přihlásit otiskem / Face ID</button>
             </form>
-            <p class="login-footer">QR kód u rybníka vede sem – po naskenování se přihlaste PINem nebo otiskem.</p>
+            <p class="login-footer">QR kód u rybníka vede sem — přihlášení vždy PINem; otisk jen pokud ho máte zaregistrovaný a prohlížeč ho podporuje.</p>
         </div>
     </div>
 

@@ -13,6 +13,7 @@
 .login-card h1 { font-size: 1.5rem; color: var(--primary); margin-bottom: .2rem; }
 .login-subtitle { font-size: .9rem; color: var(--text-secondary); margin-bottom: 1.5rem; }
 .login-hint { font-size: .85rem; color: var(--text-secondary); margin-bottom: .75rem; }
+/* type=tel + one-time-code: spolehlivější než type=password v Edge InPrivate */
 #login-pin {
     width: 100%; padding: .9rem 1rem; font-size: 1.25rem; text-align: center; letter-spacing: .4em;
     border: 2px solid var(--border); border-radius: var(--radius-sm); margin-bottom: .75rem;

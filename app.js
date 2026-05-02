@@ -665,6 +665,7 @@ async function doAdminLogin() {
     var pin = (pinEl && pinEl.value) ? pinEl.value.trim() : '';
     if (!pin) { showToast('Zadejte PIN', 'warning'); return; }
     try {
+        await ensureLoginDataFromFirebase();
         var r = await checkAdminPin(pin);
         if (!r.ok) { showToast(r.msg, 'danger'); return; }
         setAdminUnlocked(true);
@@ -780,6 +781,9 @@ function setAdminUnlocked(yes) {
     } catch (_) {}
 }
 async function hashPin(pin) {
+    if (typeof window.isSecureContext !== 'undefined' && !window.isSecureContext) {
+        throw new Error('PIN vyžaduje zabezpečený kontext (HTTPS). Otevřete https://hlubocek.github.io');
+    }
     if (!window.crypto || !window.crypto.subtle) {
         throw new Error('Ověření PINu vyžaduje zabezpečené připojení (HTTPS). Otevřete aplikaci z https://hlubocek.github.io');
     }
@@ -873,6 +877,48 @@ async function isPinUsedByOther(pin, excludeFisherId) {
         return f.pinHash === h;
     });
 }
+/**
+ * Před přihlášením (PIN / biometrie): v InPrivate může být mezipaměť prázdná — načte držitele, správcovské PINy a mapu otisků z Firebase.
+ */
+async function ensureLoginDataFromFirebase() {
+    if (!fbReady || !db) return;
+    try {
+        if (fishers.length === 0) {
+            var fs = await db.ref('fishers').once('value');
+            var fv = fs.val();
+            if (fv) {
+                fishers = Object.values(fv);
+                try { lsSave(LS.FISHERS, fishers); } catch (_) {}
+            }
+        }
+        if (!cachedAdminPinHashes.length) {
+            var snap = await db.ref('config/adminPinHashes').once('value');
+            var v = snap.val();
+            if (v) {
+                if (Array.isArray(v)) cachedAdminPinHashes = v;
+                else if (typeof v === 'object') cachedAdminPinHashes = Object.values(v);
+            }
+            if (!cachedAdminPinHashes.length) {
+                var old = await db.ref('config/pinHash').once('value');
+                if (old.val()) setAdminPinHashes([old.val()]);
+            }
+        }
+        if (!Object.keys(cachedWebauthnCredentials).length) {
+            var ws = await db.ref('config/webauthnCredentials').once('value');
+            var wv = ws.val();
+            var fromDb = (wv && typeof wv === 'object') ? wv : {};
+            var local = {};
+            try {
+                var raw = localStorage.getItem(LS.WEBAUTHN);
+                if (raw) local = JSON.parse(raw) || {};
+            } catch (_) {}
+            var merged = Object.assign({}, fromDb, local);
+            if (Object.keys(merged).length) setWebauthnCredentials(merged);
+        }
+    } catch (e) {
+        console.warn('ensureLoginDataFromFirebase', e);
+    }
+}
 function getAdminFishers() {
     var hashes = getAdminPinHashes();
     return fishers.filter(function(f) { return f.pinHash && hashes.indexOf(f.pinHash) >= 0; });
@@ -901,7 +947,49 @@ function isAndroidDevice() {
     try { return /Android/i.test((navigator && navigator.userAgent) ? navigator.userAgent : ''); } catch (_) { return false; }
 }
 function isWebAuthnSupported() {
-    return !!(window.PublicKeyCredential && window.crypto && window.crypto.subtle);
+    try {
+        return !!(window.PublicKeyCredential && typeof navigator.credentials !== 'undefined' && navigator.credentials && typeof navigator.credentials.create === 'function' && typeof navigator.credentials.get === 'function' && window.crypto && window.crypto.subtle);
+    } catch (_) { return false; }
+}
+/** Jednotný řetězec id přihlašovacího údaje (řeší rozdíly prohlížečů ArrayBuffer vs string). */
+function webauthnCredentialIdToString(credId) {
+    if (credId == null || credId === '') return '';
+    if (typeof credId === 'string') return credId;
+    try {
+        if (credId instanceof ArrayBuffer) return base64urlEncode(credId);
+        if (credId.buffer instanceof ArrayBuffer) return base64urlEncode(new Uint8Array(credId));
+    } catch (_) {}
+    return String(credId);
+}
+/** Najde fisherId v mapě otisků i při mírném rozdílu kódování id (string vs rawId). */
+function findFisherIdForWebauthnAssertion(creds, assertion) {
+    if (!creds || !assertion) return null;
+    var idStr = webauthnCredentialIdToString(assertion.id);
+    var rawStr = '';
+    try {
+        if (assertion.rawId) rawStr = base64urlEncode(new Uint8Array(assertion.rawId));
+    } catch (_) {}
+    if (idStr && creds[idStr]) return creds[idStr];
+    if (rawStr && creds[rawStr]) return creds[rawStr];
+    var want = null;
+    try {
+        if (assertion.rawId) want = new Uint8Array(assertion.rawId);
+    } catch (_) {}
+    if (!want || !want.length) return null;
+    var keys = Object.keys(creds);
+    for (var i = 0; i < keys.length; i++) {
+        try {
+            var buf = base64urlDecode(keys[i]);
+            var got = new Uint8Array(buf);
+            if (got.length !== want.length) continue;
+            var ok = true;
+            for (var j = 0; j < got.length; j++) {
+                if (got[j] !== want[j]) { ok = false; break; }
+            }
+            if (ok) return creds[keys[i]];
+        } catch (_) {}
+    }
+    return null;
 }
 function getRpId() {
     if (typeof window !== 'undefined' && window.location && window.location.hostname) {
@@ -990,7 +1078,9 @@ async function webauthnRegister(fisherId, fisherName) {
     try {
         var cred = await navigator.credentials.create({ publicKey: options });
         if (!cred || !cred.id) throw new Error('Registrace nebyla dokončena');
-        addWebauthnCredential(cred.id, fisherId);
+        var cid = webauthnCredentialIdToString(cred.id);
+        if (!cid) throw new Error('Neplatné id přihlašovacího údaje');
+        addWebauthnCredential(cid, fisherId);
         updateBiometricLoginVisibility();
         updateFisherBiometricButtons(fishers.find(function(f) { return f.id === fisherId; }));
         showToast('Otisk / Face ID uložen', 'success');
@@ -1001,14 +1091,15 @@ async function webauthnRegister(fisherId, fisherName) {
     }
 }
 async function webauthnAuthenticate() {
+    await ensureLoginDataFromFirebase();
     var creds = getWebauthnCredentials();
     var ids = Object.keys(creds);
     if (!ids.length) {
-        showToast('Žádný otisk není zaregistrován', 'warning');
+        showToast('Žádný otisk není zaregistrován. Přihlaste se PINem.', 'warning');
         return;
     }
     if (!isWebAuthnSupported()) {
-        showToast('Otisk / Face ID není podporováno', 'warning');
+        showToast('Otisk / Face ID v tomto režimu prohlížeče není k dispozici. Přihlaste se PINem.', 'warning');
         return;
     }
     var challenge = new Uint8Array(32);
@@ -1026,11 +1117,15 @@ async function webauthnAuthenticate() {
     try {
         var assertion = await navigator.credentials.get({ publicKey: options });
         if (!assertion || !assertion.id) throw new Error('Ověření nebylo dokončeno');
-        var fisherId = creds[assertion.id];
+        var fisherId = findFisherIdForWebauthnAssertion(creds, assertion);
         if (!fisherId) throw new Error('Neznámý přihlašovací identifikátor');
         var fisher = fishers.find(function(f) { return f.id === fisherId; });
+        if (!fisher && fbReady && db) {
+            await ensureLoginDataFromFirebase();
+            fisher = fishers.find(function(f) { return f.id === fisherId; });
+        }
         if (!fisher) {
-            showToast('Profil nenalezen', 'danger');
+            showToast('Profil držitele není v evidenci. Přihlaste se PINem nebo zkontrolujte připojení k Firebase.', 'danger');
             return;
         }
         try { localStorage.removeItem(LS.FISHER_ID); } catch (_) {}
@@ -1038,8 +1133,13 @@ async function webauthnAuthenticate() {
         showToast('Vítejte, ' + fisher.name, 'success');
     } catch (err) {
         console.error('WebAuthn authenticate:', err);
-        if (err.name === 'NotAllowedError') showToast('Přihlášení zrušeno', 'warning');
-        else showToast('Nepodařilo se přihlásit otiskem', 'danger');
+        if (err.name === 'NotAllowedError') {
+            showToast('Přihlášení otiskem zrušeno nebo zamítnuto (v anonymním okně Edge často nefunguje). Použijte PIN.', 'warning');
+        } else if (err.name === 'SecurityError' || (err.message && String(err.message).indexOf('secure') >= 0)) {
+            showToast('Otisk vyžaduje HTTPS a podporu prohlížeče. Použijte PIN.', 'danger');
+        } else {
+            showToast('Otisk se nepovedl — přihlaste se PINem (vždy funguje).', 'danger');
+        }
     }
 }
 
@@ -1095,6 +1195,12 @@ function showLoginScreen() {
     var submitBtn = $('#login-submit');
     if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Přihlásit'; }
     updateBiometricLoginVisibility();
+    if (fbReady && db) {
+        ensureLoginDataFromFirebase().then(function() {
+            updateBiometricLoginVisibility();
+            try { populateFisherSelects(); } catch (_) {}
+        });
+    }
 }
 function showAdminView() {
     $('#login-screen').style.display = 'none';
@@ -1803,6 +1909,7 @@ $('#login-form').addEventListener('submit', async function(e) {
     var btn = $('#login-submit');
     if (btn) { btn.disabled = true; btn.textContent = 'Ověřuji…'; }
     try {
+        await ensureLoginDataFromFirebase();
         var h = await hashPin(pin);
         var adminHashes = getAdminPinHashes();
         if (!adminHashes.length && fbReady && db) {
